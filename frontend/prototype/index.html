@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Strømkartet — prototype</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <style>
+    /* ---------- Grunntema ----------------------------------- */
+    :root {
+      --bg:        #0d1117;
+      --panel:     rgba(22, 27, 34, 0.92);
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --text-dim:  #8b949e;
+      --accent:    #58a6ff;
+
+      /* Pris-gradient (lav → høy) */
+      --c-low:    #10b981;
+      --c-mid:    #eab308;
+      --c-high:   #f97316;
+      --c-vhigh:  #dc2626;
+
+      /* Sonefarger — analog kald palett, isoluminans (S=70%, L=70%, 30° hue-stride) */
+      --zone-no1: #7cc4e8;  /* Øst-Norge   — hsl(200°) cyan-blå */
+      --zone-no2: #7c8ee8;  /* Sør-Norge   — hsl(230°) blå */
+      --zone-no3: #a07ce8;  /* Midt-Norge  — hsl(260°) lilla */
+      --zone-no4: #d67ce8;  /* Nord-Norge  — hsl(290°) magenta */
+      --zone-no5: #e87cc4;  /* Vest-Norge  — hsl(320°) rosa */
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); }
+    body {
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   Inter, "Helvetica Neue", sans-serif;
+      font-feature-settings: "tnum";
+      overflow: hidden;
+    }
+
+    #map { position: absolute; inset: 0; }
+
+    /* ---------- Paneler ------------------------------------- */
+    .panel {
+      position: absolute;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 18px;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+
+    .panel h1 {
+      margin: 0 0 4px 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+    .panel .subtitle {
+      color: var(--text-dim);
+      font-size: 11px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    #info {
+      top: 16px;
+      left: 16px;
+      min-width: 260px;
+    }
+
+    #legend {
+      bottom: 16px;
+      left: 16px;
+      min-width: 220px;
+    }
+
+    /* ---------- Kontrollpanel ------------------------------ */
+    #controls {
+      top: 96px;       /* under MapLibre NavigationControl */
+      right: 16px;
+      padding: 8px 10px;
+      min-width: 160px;
+    }
+    #controls .subtitle {
+      margin-bottom: 6px;
+    }
+    .layer-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      padding: 5px 8px;
+      cursor: pointer;
+      user-select: none;
+      color: var(--text);
+      border-radius: 3px;
+      transition: background 120ms ease;
+    }
+    .layer-toggle:hover { background: rgba(255, 255, 255, 0.05); }
+    .layer-toggle input {
+      margin: 0;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* ---------- Pris-tabell --------------------------------- */
+    #prices {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    #prices td {
+      padding: 6px 0;
+      font-variant-numeric: tabular-nums;
+    }
+    #prices tr + tr td { border-top: 1px solid #21262d; }
+    #prices .zone {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+    #prices .swatch {
+      display: inline-block;
+      width: 3px;
+      height: 14px;
+      border-radius: 1px;
+    }
+    #prices .price {
+      text-align: right;
+      color: var(--text);
+      font-weight: 500;
+    }
+    #prices .unit {
+      color: var(--text-dim);
+      margin-left: 4px;
+      font-weight: 400;
+    }
+
+    /* ---------- Legend ------------------------------------- */
+    .legend-bar {
+      height: 10px;
+      border-radius: 2px;
+      background: linear-gradient(to right,
+        var(--c-low) 0%,
+        var(--c-mid) 40%,
+        var(--c-high) 70%,
+        var(--c-vhigh) 100%);
+    }
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Tooltip ------------------------------------ */
+    .maplibregl-popup-content {
+      background: var(--panel) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0 !important;
+      font-family: inherit;
+      font-size: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      overflow: hidden;
+      min-width: 220px;
+    }
+    .maplibregl-popup-tip { display: none; }
+    .popup-accent {
+      height: 3px;
+      width: 100%;
+    }
+    .popup-body {
+      padding: 10px 12px 11px 12px;
+    }
+    .popup-region {
+      font-size: 12px;
+      color: var(--text-dim);
+      letter-spacing: 0.3px;
+    }
+    .popup-zone {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .popup-price {
+      font-size: 17px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.2px;
+    }
+    .popup-price .unit {
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 400;
+      margin-left: 4px;
+    }
+    .popup-meta {
+      color: var(--text-dim);
+      font-size: 10.5px;
+      margin-top: 6px;
+      letter-spacing: 0.2px;
+    }
+    .popup-sparkline {
+      display: block;
+      width: 100%;
+      height: 38px;
+      margin-top: 8px;
+      overflow: visible;
+    }
+
+    /* ---------- Status ------------------------------------- */
+    .status-err { color: #f85149; font-size: 11px; margin-top: 8px; }
+
+    /* ---------- Skalaviser (MapLibre ScaleControl) -------- */
+    .maplibregl-ctrl-scale {
+      background-color: rgba(22, 27, 34, 0.85) !important;
+      border: 1px solid var(--border) !important;
+      border-top: none !important;
+      color: var(--text-dim) !important;
+      font-size: 11px;
+      padding: 2px 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pulse {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--c-low);
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <div id="info" class="panel">
+    <h1>Strømkart Norge</h1>
+    <div class="subtitle"><span class="pulse"></span>Sanntid · spotpris</div>
+    <table id="prices"><tbody>
+      <tr><td colspan="2" style="color: var(--text-dim);">Laster…</td></tr>
+    </tbody></table>
+    <div id="error" class="status-err"></div>
+  </div>
+
+  <div id="legend" class="panel">
+    <div class="subtitle" style="margin-bottom: 8px;">Spotpris (EUR/MWh)</div>
+    <div class="legend-bar"></div>
+    <div class="legend-labels">
+      <span>0</span><span>50</span><span>100</span><span>150+</span>
+    </div>
+  </div>
+
+  <div id="controls" class="panel">
+    <div class="subtitle">Lag</div>
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggle-spotpris" checked>
+      <span>Spotpris</span>
+    </label>
+  </div>
+
+  <script>
+    // ---------------------------------------------------------
+    // 1) Kart med CARTO Dark Matter
+    // ---------------------------------------------------------
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+      center: [12.5, 64.5],   // omtrent midten av Norge
+      zoom: 3.8,
+      attributionControl: { compact: true },
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({
+      maxWidth: 120,
+      unit: 'metric',
+    }), 'bottom-right');
+
+    // ---------------------------------------------------------
+    // 2) Fargeskala (samme stops som CSS-legenden)
+    // ---------------------------------------------------------
+    const PRICE_PAINT = [
+      'interpolate', ['linear'],
+      ['coalesce', ['get', 'price_eur_mwh'], -1],
+      -1,  '#374151',   // grå hvis pris mangler
+      0,   '#10b981',
+      30,  '#10b981',
+      60,  '#eab308',
+      100, '#f97316',
+      150, '#dc2626',
+    ];
+
+    // Sonefarger (kant) — analog kald palett, isoluminans (S=70%, L=70%)
+    // Hue: 200° → 320° i 30°-steg gir harmoni og full skillbarhet
+    const ZONE_COLORS = {
+      NO1: '#7cc4e8',  // hsl(200, 70%, 70%) cyan-blå
+      NO2: '#7c8ee8',  // hsl(230, 70%, 70%) blå
+      NO3: '#a07ce8',  // hsl(260, 70%, 70%) lilla
+      NO4: '#d67ce8',  // hsl(290, 70%, 70%) magenta
+      NO5: '#e87cc4',  // hsl(320, 70%, 70%) rosa
+    };
+    const ZONE_NAMES = {
+      NO1: 'Øst-Norge',
+      NO2: 'Sør-Norge',
+      NO3: 'Midt-Norge',
+      NO4: 'Nord-Norge',
+      NO5: 'Vest-Norge',
+    };
+
+    // Match-uttrykk for line-color basert på zoneName
+    const ZONE_LINE_PAINT = [
+      'match', ['get', 'zoneName'],
+      'NO1', ZONE_COLORS.NO1,
+      'NO2', ZONE_COLORS.NO2,
+      'NO3', ZONE_COLORS.NO3,
+      'NO4', ZONE_COLORS.NO4,
+      'NO5', ZONE_COLORS.NO5,
+      '#6b7280',  // fallback (skal ikke skje)
+    ];
+
+    // De 6 største byene — hardkodet GeoJSON
+    const CITIES = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { name: 'Oslo' },         geometry: { type: 'Point', coordinates: [10.7522, 59.9139] } },
+        { type: 'Feature', properties: { name: 'Bergen' },       geometry: { type: 'Point', coordinates: [ 5.3221, 60.3913] } },
+        { type: 'Feature', properties: { name: 'Trondheim' },    geometry: { type: 'Point', coordinates: [10.3951, 63.4305] } },
+        { type: 'Feature', properties: { name: 'Stavanger' },    geometry: { type: 'Point', coordinates: [ 5.7331, 58.9700] } },
+        { type: 'Feature', properties: { name: 'Tromsø' },       geometry: { type: 'Point', coordinates: [18.9560, 69.6492] } },
+        { type: 'Feature', properties: { name: 'Kristiansand' }, geometry: { type: 'Point', coordinates: [ 7.9956, 58.1599] } },
+      ],
+    };
+
+    // Bakgrunnskart-switcher fjernet 2026-06-19 — Dark Matter eneste basemap.
+    // Bug med tapt tilstand ved map.setStyle() dermed omgått, ikke løst.
+    // Hvis vi gjeninnfører flere basemaps senere, må addOverlays() kalles
+    // etter hver setStyle() via whenStyleLoaded() — se git-historikken.
+
+    function priceColor(p) {
+      if (p == null) return '#374151';
+      if (p <= 30)  return '#10b981';
+      if (p <= 60)  return '#eab308';
+      if (p <= 100) return '#f97316';
+      return '#dc2626';
+    }
+
+    // ---------------------------------------------------------
+    // 3) Hent data og rendér
+    // ---------------------------------------------------------
+    // Cache for dagens (og morgendagens) timeserier — fylles av loadData,
+    // brukes av popup når brukeren hovrer.
+    let todayPrices = {};
+
+    async function loadData() {
+      try {
+        const [zonesRes, pricesRes, todayRes] = await Promise.all([
+          fetch('/api/zones/'),
+          fetch('/api/prices/current'),
+          fetch('/api/prices/today'),
+        ]);
+        if (!zonesRes.ok)  throw new Error(`/api/zones returned ${zonesRes.status}`);
+        if (!pricesRes.ok) throw new Error(`/api/prices/current returned ${pricesRes.status}`);
+        // /today er "nice to have" — manglende grafdata skal ikke knekke siden
+        if (!todayRes.ok)  console.warn(`/api/prices/today returned ${todayRes.status}`);
+
+        const zones  = await zonesRes.json();
+        const prices = await pricesRes.json();
+        todayPrices  = todayRes.ok ? await todayRes.json() : {};
+
+        // Slå sammen pris inn i hver feature
+        for (const f of zones.features) {
+          const zoneName = f.properties.zoneName;
+          const p = prices[zoneName];
+          if (p && p.price_eur_mwh != null) {
+            f.properties.price_eur_mwh = p.price_eur_mwh;
+            f.properties.timestamp     = p.timestamp;
+          }
+        }
+
+        renderMap(zones);
+        renderTable(zones, prices);
+
+      } catch (err) {
+        document.getElementById('error').textContent = 'Klarte ikke å hente data: ' + err.message;
+        console.error(err);
+      }
+    }
+
+    function renderMap(zones) {
+      zonesData = zones;
+      // 'style.load' og 'load' er upålitelige etter setStyle — bruk en
+      // polling-basert hjelper i stedet (definert nedenfor).
+      whenStyleLoaded(addOverlays);
+
+      // Zoom så Norge fyller skjermen — kun ved første rendring,
+      // ikke når renderMap kjøres på nytt via 5-min refresh
+      if (!initialFitDone) {
+        map.fitBounds([[3.0, 57.5], [32.0, 71.5]], { padding: 60, duration: 800 });
+        initialFitDone = true;
+      }
+    }
+
+    // ---------------------------------------------------------
+    // Modul-tilstand for overlays
+    // ---------------------------------------------------------
+    let zonesData = null;
+    let overlayHandlersAttached = false;
+    let initialFitDone = false;
+    let spotPriceVisible = true;   // styres av sjekkboks i map-controls-panelet
+
+    // Popup-instans gjenbrukes på tvers av stil-bytter
+    const zonePopup = new maplibregl.Popup({
+      closeButton: false, closeOnClick: false, offset: 8,
+    });
+
+    /**
+     * Kjører callback når MapLibre-stilen er fullastet og klar for å motta
+     * lag/kilder. 'style.load'-eventet er upålitelig på tvers av versjoner
+     * (fyrer ofte kun ved første lasting), så vi poller isStyleLoaded()
+     * via 'styledata'-eventet, som fyrer hver gang stildata oppdateres.
+     */
+    function whenStyleLoaded(callback) {
+      if (map.isStyleLoaded()) {
+        callback();
+      } else {
+        map.once('styledata', () => whenStyleLoaded(callback));
+      }
+    }
+
+    /**
+     * Legger til alle "ting på toppen av bakgrunnskartet": prissoner, byer,
+     * og hover-handlers. Kjøres ved første lasting og ved hver 5-min refresh.
+     *
+     * Funksjonen er idempotent — den kan kjøres flere ganger trygt:
+     *  - Første lasting: source og lag opprettes.
+     *  - 5-min refresh: source eksisterer, lagene også; vi oppdaterer
+     *    bare source-data via setData() så fargene flytter seg.
+     */
+    function addOverlays() {
+      if (!zonesData) return;
+
+      // --- Prissoner: source-data oppdateres ved refresh ---
+      const zonesSrc = map.getSource('zones');
+      if (zonesSrc) {
+        zonesSrc.setData(zonesData);
+      } else {
+        map.addSource('zones', { type: 'geojson', data: zonesData });
+      }
+      if (!map.getLayer('zones-fill')) {
+        map.addLayer({
+          id: 'zones-fill',
+          type: 'fill',
+          source: 'zones',
+          paint: {
+            'fill-color': PRICE_PAINT,
+            'fill-opacity': 0.55,
+          },
+        });
+      }
+      if (!map.getLayer('zones-line')) {
+        map.addLayer({
+          id: 'zones-line',
+          type: 'line',
+          source: 'zones',
+          paint: {
+            'line-color': ZONE_LINE_PAINT,
+            'line-opacity': 0.9,
+            'line-width': 1.5,
+          },
+        });
+      }
+
+      // --- Byer: statisk data, opprettes kun én gang per stil ---
+      if (!map.getSource('cities')) {
+        map.addSource('cities', { type: 'geojson', data: CITIES });
+      }
+      if (!map.getLayer('cities-dot')) {
+        map.addLayer({
+          id: 'cities-dot',
+          type: 'circle',
+          source: 'cities',
+          paint: {
+            'circle-radius': 3.5,
+            'circle-color': '#e6edf3',
+            'circle-stroke-color': '#0d1117',
+            'circle-stroke-width': 1.5,
+          },
+        });
+      }
+      if (!map.getLayer('cities-label')) {
+        map.addLayer({
+          id: 'cities-label',
+          type: 'symbol',
+          source: 'cities',
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-font': ['Open Sans Semibold', 'Open Sans Regular'],
+            'text-size': 12,
+            'text-offset': [0.7, 0.15],
+            'text-anchor': 'left',
+            'text-allow-overlap': false,
+          },
+          paint: {
+            'text-color': '#f0f6fc',
+            'text-halo-color': '#0d1117',
+            'text-halo-width': 1.5,
+            'text-halo-blur': 0.5,
+          },
+        });
+      }
+
+      updateOverlayVisibility();
+
+      // Hover-handlers festes kun én gang — de overlever stil-bytter
+      // fordi MapLibre filtrerer på lag-ID, ikke på lag-instans.
+      if (!overlayHandlersAttached) {
+        map.on('mousemove', 'zones-fill', handleZoneHover);
+        map.on('mouseleave', 'zones-fill', handleZoneLeave);
+        overlayHandlersAttached = true;
+      }
+    }
+
+    /**
+     * Oppdaterer synlighet på overlay-lag:
+     *  - Prissoner skjules når brukeren har slått av Spotpris-toggle
+     *  - Byer er alltid synlige (Dark Matter har ingen egne bynavn å kollidere med)
+     * Kalles ved første lasting og hver gang toggle endres.
+     */
+    function updateOverlayVisibility() {
+      const zonesV = spotPriceVisible ? 'visible' : 'none';
+
+      if (map.getLayer('zones-fill')) {
+        map.setLayoutProperty('zones-fill', 'visibility', zonesV);
+      }
+      if (map.getLayer('zones-line')) {
+        map.setLayoutProperty('zones-line', 'visibility', zonesV);
+      }
+    }
+
+    function setSpotPriceVisible(visible) {
+      spotPriceVisible = visible;
+      updateOverlayVisibility();
+      // Hvis brukeren slår av mens en tooltip står åpen, lukk den
+      if (!visible) zonePopup.remove();
+    }
+
+    function handleZoneHover(e) {
+      map.getCanvas().style.cursor = 'pointer';
+      const f = e.features[0];
+      const zone = f.properties.zoneName;
+      const price = f.properties.price_eur_mwh;
+      const ts = f.properties.timestamp;
+      const accent = ZONE_COLORS[zone] || '#6b7280';
+      const region = ZONE_NAMES[zone] || '';
+      const timeStr = ts
+        ? new Date(ts).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' })
+        : '';
+      const priceColorTxt = priceColor(price);
+      const sparkline = renderSparkline(todayPrices[zone], accent);
+      zonePopup
+        .setLngLat(e.lngLat)
+        .setHTML(`
+          <div class="popup-accent" style="background:${accent}"></div>
+          <div class="popup-body">
+            <div class="popup-region">${region}</div>
+            <div class="popup-zone">${zone}</div>
+            <div class="popup-price" style="color:${priceColorTxt}">
+              ${price != null ? price.toFixed(2) : '—'}
+              <span class="unit">EUR/MWh</span>
+            </div>
+            ${sparkline}
+            ${timeStr ? `<div class="popup-meta">${timeStr}</div>` : ''}
+          </div>
+        `)
+        .addTo(map);
+    }
+
+    function handleZoneLeave() {
+      map.getCanvas().style.cursor = '';
+      zonePopup.remove();
+    }
+
+    /**
+     * Tegner en mini sparkline (SVG) av dagens prisutvikling i en sone.
+     * Returnerer en HTML-streng som kan settes inn direkte i popup.
+     *
+     *   zoneSeries — objektet fra /api/prices/today for én sone,
+     *                {zone, currency, resolution, prices: [{timestamp, price_eur_mwh}]}
+     *   accent     — sonefargen (brukes for linje og fyll)
+     *
+     * Returnerer tom streng hvis data mangler eller er ufullstendig.
+     */
+    function renderSparkline(zoneSeries, accent) {
+      if (!zoneSeries || !Array.isArray(zoneSeries.prices) || zoneSeries.prices.length < 2) {
+        return '';
+      }
+      const data = zoneSeries.prices;
+
+      // Dimensjoner — bred nok til å lese forløpet, lav for å holde tooltip kompakt
+      const W = 200, H = 40;
+      const padX = 2, padY = 4;
+      const innerW = W - padX * 2;
+      const innerH = H - padY * 2;
+
+      // Tids- og prisområder
+      const times  = data.map(d => new Date(d.timestamp).getTime());
+      const prices = data.map(d => d.price_eur_mwh);
+      const tMin = times[0],  tMax = times[times.length - 1];
+      const pMin = Math.min(...prices), pMax = Math.max(...prices);
+      const pRange = (pMax - pMin) || 1;   // unngå deling på 0 (flat pris)
+      const tRange = (tMax - tMin) || 1;
+
+      const xOf = t => padX + ((t - tMin) / tRange) * innerW;
+      const yOf = p => padY + (1 - (p - pMin) / pRange) * innerH;
+
+      // Linje-path
+      let line = '';
+      data.forEach((d, i) => {
+        const x = xOf(times[i]);
+        const y = yOf(prices[i]);
+        line += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+      });
+
+      // Fylt areal: linje + ned til bunn, lukket
+      const bottomY = (H - padY).toFixed(1);
+      const firstX  = xOf(times[0]).toFixed(1);
+      const lastX   = xOf(times[times.length - 1]).toFixed(1);
+      const area = line + `L${lastX},${bottomY} L${firstX},${bottomY} Z`;
+
+      // "Nå"-markør — vertikal linje hvis nåtid er innenfor serien
+      const nowMs = Date.now();
+      let nowMarker = '';
+      if (nowMs >= tMin && nowMs <= tMax) {
+        const x = xOf(nowMs).toFixed(1);
+        nowMarker = `<line x1="${x}" y1="${padY}" x2="${x}" y2="${bottomY}" stroke="#f0f6fc" stroke-width="1" opacity="0.65"/>`;
+      }
+
+      // Dag-skille — stiplet vertikal linje når serien spenner to datoer.
+      // Bruker ISO-prefiksene (YYYY-MM-DD) for å sammenligne i Norge-tid,
+      // siden backend gir tidsstempler med +01:00/+02:00-offset.
+      let daySep = '';
+      const firstDay = data[0].timestamp.slice(0, 10);
+      for (let i = 1; i < data.length; i++) {
+        if (data[i].timestamp.slice(0, 10) !== firstDay) {
+          const x = xOf(times[i]).toFixed(1);
+          daySep = `<line x1="${x}" y1="${padY}" x2="${x}" y2="${bottomY}" stroke="${accent}" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>`;
+          break;
+        }
+      }
+
+      return `
+        <svg class="popup-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <path d="${area}" fill="${accent}" fill-opacity="0.18"/>
+          <path d="${line}" stroke="${accent}" stroke-width="1.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+          ${daySep}
+          ${nowMarker}
+        </svg>
+      `;
+    }
+
+    function renderTable(zones, prices) {
+      const tbody = document.querySelector('#prices tbody');
+      tbody.innerHTML = '';
+      const zoneOrder = ['NO1', 'NO2', 'NO3', 'NO4', 'NO5'];
+      for (const z of zoneOrder) {
+        const p = prices[z];
+        const price = p && p.price_eur_mwh != null ? p.price_eur_mwh : null;
+        const zoneCol  = ZONE_COLORS[z] || '#6b7280';
+        const priceCol = priceColor(price);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="zone">
+            <span class="swatch" style="background:${zoneCol}"></span>
+            ${z}
+          </td>
+          <td class="price" style="color:${priceCol}">
+            ${price != null ? price.toFixed(2) : '—'}
+            <span class="unit">EUR/MWh</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // Koble spotpris-toggle til synlighetslogikken
+    document.getElementById('toggle-spotpris').addEventListener('change', (e) => {
+      setSpotPriceVisible(e.target.checked);
+    });
+
+    loadData();
+
+    // Oppfrisk hvert 5. min
+    setInterval(loadData, 5 * 60 * 1000);
+  </script>
+</body>
+</html>

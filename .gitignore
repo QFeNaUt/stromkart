@@ -1,7 +1,37 @@
-﻿.env
+# Hemmeligheter
+.env
+*.env
+!.env.example
+
+# Python
 __pycache__/
-*.pyc
-*.db
-node_modules/
+*.py[cod]
+*$py.class
 .venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# Data og cache (kommitt strukturen, ikke innholdet)
+data/cache/*
+!data/cache/.gitkeep
+
+# Node / frontend (kommer i neste fase)
+node_modules/
 dist/
+build/
+.vite/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lokale arkiver og backups
+*.zip
+*.bak
