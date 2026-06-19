@@ -286,7 +286,7 @@
     const map = new maplibregl.Map({
       container: 'map',
       style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-      center: [12.5, 64.5],   // omtrent midten av Norge
+      center: [12.5, 64.5],
       zoom: 3.8,
       attributionControl: { compact: true },
     });
@@ -296,13 +296,20 @@
       unit: 'metric',
     }), 'bottom-right');
 
+    // Flagg for å vite om kartet er klart til å ta imot lag
+    let mapLoaded = false;
+    map.on('load', () => {
+      mapLoaded = true;
+      if (zonesData) addOverlays();
+    });
+
     // ---------------------------------------------------------
-    // 2) Fargeskala (samme stops som CSS-legenden)
+    // 2) Fargeskala og styling
     // ---------------------------------------------------------
     const PRICE_PAINT = [
       'interpolate', ['linear'],
       ['coalesce', ['get', 'price_eur_mwh'], -1],
-      -1,  '#374151',   // grå hvis pris mangler
+      -1,  '#374151',
       0,   '#10b981',
       30,  '#10b981',
       60,  '#eab308',
@@ -310,15 +317,14 @@
       150, '#dc2626',
     ];
 
-    // Sonefarger (kant) — analog kald palett, isoluminans (S=70%, L=70%)
-    // Hue: 200° → 320° i 30°-steg gir harmoni og full skillbarhet
     const ZONE_COLORS = {
-      NO1: '#7cc4e8',  // hsl(200, 70%, 70%) cyan-blå
-      NO2: '#7c8ee8',  // hsl(230, 70%, 70%) blå
-      NO3: '#a07ce8',  // hsl(260, 70%, 70%) lilla
-      NO4: '#d67ce8',  // hsl(290, 70%, 70%) magenta
-      NO5: '#e87cc4',  // hsl(320, 70%, 70%) rosa
+      NO1: '#7cc4e8',
+      NO2: '#7c8ee8',
+      NO3: '#a07ce8',
+      NO4: '#d67ce8',
+      NO5: '#e87cc4',
     };
+    
     const ZONE_NAMES = {
       NO1: 'Øst-Norge',
       NO2: 'Sør-Norge',
@@ -327,7 +333,6 @@
       NO5: 'Vest-Norge',
     };
 
-    // Match-uttrykk for line-color basert på zoneName
     const ZONE_LINE_PAINT = [
       'match', ['get', 'zoneName'],
       'NO1', ZONE_COLORS.NO1,
@@ -335,10 +340,9 @@
       'NO3', ZONE_COLORS.NO3,
       'NO4', ZONE_COLORS.NO4,
       'NO5', ZONE_COLORS.NO5,
-      '#6b7280',  // fallback (skal ikke skje)
+      '#6b7280',
     ];
 
-    // De 6 største byene — hardkodet GeoJSON
     const CITIES = {
       type: 'FeatureCollection',
       features: [
@@ -351,11 +355,6 @@
       ],
     };
 
-    // Bakgrunnskart-switcher fjernet 2026-06-19 — Dark Matter eneste basemap.
-    // Bug med tapt tilstand ved map.setStyle() dermed omgått, ikke løst.
-    // Hvis vi gjeninnfører flere basemaps senere, må addOverlays() kalles
-    // etter hver setStyle() via whenStyleLoaded() — se git-historikken.
-
     function priceColor(p) {
       if (p == null) return '#374151';
       if (p <= 30)  return '#10b981';
@@ -365,22 +364,56 @@
     }
 
     // ---------------------------------------------------------
+    // NYTT: Robust Fetch-funksjon (Håndterer Altibox/Cloudflare-hikke)
+    // ---------------------------------------------------------
+    async function fetchWithRetry(url, retries = 3, backoffMs = 2000) {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) return res;
+          
+          // Hvis vi får en typisk tunnel-feil, vent og prøv på nytt
+          if ([502, 504, 530].includes(res.status)) {
+            console.warn(`[Tunnel-hikke] ${url} ga ${res.status}. Prøver på nytt om 2s...`);
+            await new Promise(r => setTimeout(r, backoffMs));
+            continue;
+          }
+          return res; // Returner andre feil (f.eks 404) direkte
+        } catch (err) {
+          console.warn(`[Nettverksfeil] ${url} feilet. Prøver på nytt om 2s...`);
+          await new Promise(r => setTimeout(r, backoffMs));
+        }
+      }
+      return fetch(url); // Siste forsøk
+    }
+
+    // ---------------------------------------------------------
     // 3) Hent data og rendér
     // ---------------------------------------------------------
-    // Cache for dagens (og morgendagens) timeserier — fylles av loadData,
-    // brukes av popup når brukeren hovrer.
     let todayPrices = {};
+    let zonesData = null;
+    let overlayHandlersAttached = false;
+    let initialFitDone = false;
+    let spotPriceVisible = true;
+
+    const zonePopup = new maplibregl.Popup({
+      closeButton: false, closeOnClick: false, offset: 8,
+    });
 
     async function loadData() {
       try {
+        const errorDiv = document.getElementById('error');
+        errorDiv.textContent = ''; // Tøm evt gammel feilmelding
+        
+        // Bruk den nye retry-funksjonen for å hente data
         const [zonesRes, pricesRes, todayRes] = await Promise.all([
-          fetch('/api/zones/'),
-          fetch('/api/prices/current'),
-          fetch('/api/prices/today'),
+          fetchWithRetry('/api/zones/'),
+          fetchWithRetry('/api/prices/current'),
+          fetchWithRetry('/api/prices/today'),
         ]);
+
         if (!zonesRes.ok)  throw new Error(`/api/zones returned ${zonesRes.status}`);
         if (!pricesRes.ok) throw new Error(`/api/prices/current returned ${pricesRes.status}`);
-        // /today er "nice to have" — manglende grafdata skal ikke knekke siden
         if (!todayRes.ok)  console.warn(`/api/prices/today returned ${todayRes.status}`);
 
         const zones  = await zonesRes.json();
@@ -401,71 +434,35 @@
         renderTable(zones, prices);
 
       } catch (err) {
-        document.getElementById('error').textContent = 'Klarte ikke å hente data: ' + err.message;
+        document.getElementById('error').textContent = 'Venter på nettverk... Klarte ikke å hente ferske data.';
         console.error(err);
       }
     }
 
     function renderMap(zones) {
       zonesData = zones;
-      // 'style.load' og 'load' er upålitelige etter setStyle — bruk en
-      // polling-basert hjelper i stedet (definert nedenfor).
-      whenStyleLoaded(addOverlays);
+      
+      // Bare tegn hvis kart-rammeverket er helt ferdig innlastet
+      if (mapLoaded) {
+        addOverlays();
+      }
 
-      // Zoom så Norge fyller skjermen — kun ved første rendring,
-      // ikke når renderMap kjøres på nytt via 5-min refresh
       if (!initialFitDone) {
         map.fitBounds([[3.0, 57.5], [32.0, 71.5]], { padding: 60, duration: 800 });
         initialFitDone = true;
       }
     }
 
-    // ---------------------------------------------------------
-    // Modul-tilstand for overlays
-    // ---------------------------------------------------------
-    let zonesData = null;
-    let overlayHandlersAttached = false;
-    let initialFitDone = false;
-    let spotPriceVisible = true;   // styres av sjekkboks i map-controls-panelet
-
-    // Popup-instans gjenbrukes på tvers av stil-bytter
-    const zonePopup = new maplibregl.Popup({
-      closeButton: false, closeOnClick: false, offset: 8,
-    });
-
-    /**
-     * Kjører callback når MapLibre-stilen er fullastet og klar for å motta
-     * lag/kilder. 'style.load'-eventet er upålitelig på tvers av versjoner
-     * (fyrer ofte kun ved første lasting), så vi poller isStyleLoaded()
-     * via 'styledata'-eventet, som fyrer hver gang stildata oppdateres.
-     */
-    function whenStyleLoaded(callback) {
-      if (map.isStyleLoaded()) {
-        callback();
-      } else {
-        map.once('styledata', () => whenStyleLoaded(callback));
-      }
-    }
-
-    /**
-     * Legger til alle "ting på toppen av bakgrunnskartet": prissoner, byer,
-     * og hover-handlers. Kjøres ved første lasting og ved hver 5-min refresh.
-     *
-     * Funksjonen er idempotent — den kan kjøres flere ganger trygt:
-     *  - Første lasting: source og lag opprettes.
-     *  - 5-min refresh: source eksisterer, lagene også; vi oppdaterer
-     *    bare source-data via setData() så fargene flytter seg.
-     */
     function addOverlays() {
       if (!zonesData) return;
 
-      // --- Prissoner: source-data oppdateres ved refresh ---
       const zonesSrc = map.getSource('zones');
       if (zonesSrc) {
         zonesSrc.setData(zonesData);
       } else {
         map.addSource('zones', { type: 'geojson', data: zonesData });
       }
+      
       if (!map.getLayer('zones-fill')) {
         map.addLayer({
           id: 'zones-fill',
@@ -477,6 +474,7 @@
           },
         });
       }
+      
       if (!map.getLayer('zones-line')) {
         map.addLayer({
           id: 'zones-line',
@@ -490,7 +488,7 @@
         });
       }
 
-      // --- Byer: statisk data, opprettes kun én gang per stil ---
+      // Byer
       if (!map.getSource('cities')) {
         map.addSource('cities', { type: 'geojson', data: CITIES });
       }
@@ -531,8 +529,6 @@
 
       updateOverlayVisibility();
 
-      // Hover-handlers festes kun én gang — de overlever stil-bytter
-      // fordi MapLibre filtrerer på lag-ID, ikke på lag-instans.
       if (!overlayHandlersAttached) {
         map.on('mousemove', 'zones-fill', handleZoneHover);
         map.on('mouseleave', 'zones-fill', handleZoneLeave);
@@ -540,27 +536,15 @@
       }
     }
 
-    /**
-     * Oppdaterer synlighet på overlay-lag:
-     *  - Prissoner skjules når brukeren har slått av Spotpris-toggle
-     *  - Byer er alltid synlige (Dark Matter har ingen egne bynavn å kollidere med)
-     * Kalles ved første lasting og hver gang toggle endres.
-     */
     function updateOverlayVisibility() {
       const zonesV = spotPriceVisible ? 'visible' : 'none';
-
-      if (map.getLayer('zones-fill')) {
-        map.setLayoutProperty('zones-fill', 'visibility', zonesV);
-      }
-      if (map.getLayer('zones-line')) {
-        map.setLayoutProperty('zones-line', 'visibility', zonesV);
-      }
+      if (map.getLayer('zones-fill')) map.setLayoutProperty('zones-fill', 'visibility', zonesV);
+      if (map.getLayer('zones-line')) map.setLayoutProperty('zones-line', 'visibility', zonesV);
     }
 
     function setSpotPriceVisible(visible) {
       spotPriceVisible = visible;
       updateOverlayVisibility();
-      // Hvis brukeren slår av mens en tooltip står åpen, lukk den
       if (!visible) zonePopup.remove();
     }
 
@@ -572,11 +556,10 @@
       const ts = f.properties.timestamp;
       const accent = ZONE_COLORS[zone] || '#6b7280';
       const region = ZONE_NAMES[zone] || '';
-      const timeStr = ts
-        ? new Date(ts).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' })
-        : '';
+      const timeStr = ts ? new Date(ts).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' }) : '';
       const priceColorTxt = priceColor(price);
       const sparkline = renderSparkline(todayPrices[zone], accent);
+      
       zonePopup
         .setLngLat(e.lngLat)
         .setHTML(`
@@ -600,70 +583,42 @@
       zonePopup.remove();
     }
 
-    /**
-     * Tegner en mini sparkline (SVG) av dagens prisutvikling i en sone.
-     * Returnerer en HTML-streng som kan settes inn direkte i popup.
-     *
-     *   zoneSeries — objektet fra /api/prices/today for én sone,
-     *                {zone, currency, resolution, prices: [{timestamp, price_eur_mwh}]}
-     *   accent     — sonefargen (brukes for linje og fyll)
-     *
-     * Returnerer tom streng hvis data mangler eller er ufullstendig.
-     */
     function renderSparkline(zoneSeries, accent) {
-      if (!zoneSeries || !Array.isArray(zoneSeries.prices) || zoneSeries.prices.length < 2) {
-        return '';
-      }
+      if (!zoneSeries || !Array.isArray(zoneSeries.prices) || zoneSeries.prices.length < 2) return '';
       const data = zoneSeries.prices;
-
-      // Dimensjoner — bred nok til å lese forløpet, lav for å holde tooltip kompakt
-      const W = 200, H = 40;
-      const padX = 2, padY = 4;
-      const innerW = W - padX * 2;
-      const innerH = H - padY * 2;
-
-      // Tids- og prisområder
+      const W = 200, H = 40, padX = 2, padY = 4;
+      const innerW = W - padX * 2, innerH = H - padY * 2;
       const times  = data.map(d => new Date(d.timestamp).getTime());
       const prices = data.map(d => d.price_eur_mwh);
       const tMin = times[0],  tMax = times[times.length - 1];
       const pMin = Math.min(...prices), pMax = Math.max(...prices);
-      const pRange = (pMax - pMin) || 1;   // unngå deling på 0 (flat pris)
+      const pRange = (pMax - pMin) || 1;
       const tRange = (tMax - tMin) || 1;
 
       const xOf = t => padX + ((t - tMin) / tRange) * innerW;
       const yOf = p => padY + (1 - (p - pMin) / pRange) * innerH;
 
-      // Linje-path
       let line = '';
       data.forEach((d, i) => {
-        const x = xOf(times[i]);
-        const y = yOf(prices[i]);
-        line += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+        line += (i === 0 ? 'M' : 'L') + xOf(times[i]).toFixed(1) + ',' + yOf(prices[i]).toFixed(1) + ' ';
       });
 
-      // Fylt areal: linje + ned til bunn, lukket
       const bottomY = (H - padY).toFixed(1);
       const firstX  = xOf(times[0]).toFixed(1);
       const lastX   = xOf(times[times.length - 1]).toFixed(1);
       const area = line + `L${lastX},${bottomY} L${firstX},${bottomY} Z`;
 
-      // "Nå"-markør — vertikal linje hvis nåtid er innenfor serien
       const nowMs = Date.now();
       let nowMarker = '';
       if (nowMs >= tMin && nowMs <= tMax) {
-        const x = xOf(nowMs).toFixed(1);
-        nowMarker = `<line x1="${x}" y1="${padY}" x2="${x}" y2="${bottomY}" stroke="#f0f6fc" stroke-width="1" opacity="0.65"/>`;
+        nowMarker = `<line x1="${xOf(nowMs).toFixed(1)}" y1="${padY}" x2="${xOf(nowMs).toFixed(1)}" y2="${bottomY}" stroke="#f0f6fc" stroke-width="1" opacity="0.65"/>`;
       }
 
-      // Dag-skille — stiplet vertikal linje når serien spenner to datoer.
-      // Bruker ISO-prefiksene (YYYY-MM-DD) for å sammenligne i Norge-tid,
-      // siden backend gir tidsstempler med +01:00/+02:00-offset.
       let daySep = '';
       const firstDay = data[0].timestamp.slice(0, 10);
       for (let i = 1; i < data.length; i++) {
         if (data[i].timestamp.slice(0, 10) !== firstDay) {
-          const x = xOf(times[i]).toFixed(1);
-          daySep = `<line x1="${x}" y1="${padY}" x2="${x}" y2="${bottomY}" stroke="${accent}" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>`;
+          daySep = `<line x1="${xOf(times[i]).toFixed(1)}" y1="${padY}" x2="${xOf(times[i]).toFixed(1)}" y2="${bottomY}" stroke="${accent}" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>`;
           break;
         }
       }
@@ -702,14 +657,11 @@
       }
     }
 
-    // Koble spotpris-toggle til synlighetslogikken
     document.getElementById('toggle-spotpris').addEventListener('change', (e) => {
       setSpotPriceVisible(e.target.checked);
     });
 
     loadData();
-
-    // Oppfrisk hvert 5. min
     setInterval(loadData, 5 * 60 * 1000);
   </script>
 </body>
