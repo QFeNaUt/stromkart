@@ -22,6 +22,8 @@ import pandas as pd
 from dotenv import load_dotenv
 from entsoe import EntsoePandasClient
 
+from app.services import norges_bank_service
+
 load_dotenv()
 
 ZONE_CODES = {
@@ -56,6 +58,22 @@ def _cache_set(key: str, data) -> None:
     _cache[key] = (time.time(), data)
 
 
+def _eur_mwh_to_ore_kwh(eur_mwh: float, rate: float) -> float:
+    """
+    Konverterer EUR/MWh → øre/kWh.
+
+    Trinn for trinn:
+        EUR/MWh ÷ 1000  → EUR/kWh   (1 MWh = 1000 kWh)
+        EUR/kWh × rate  → NOK/kWh   (rate = antall NOK per 1 EUR)
+        NOK/kWh × 100   → øre/kWh   (1 krone = 100 øre)
+
+    Slått sammen blir det:  øre/kWh = EUR/MWh × rate ÷ 10
+
+    Eksempel: 7.78 EUR/MWh × 11.50 ÷ 10 = 8.95 øre/kWh
+    """
+    return eur_mwh * rate / 10.0
+
+
 _client: Optional[EntsoePandasClient] = None
 
 
@@ -73,10 +91,13 @@ def get_client() -> EntsoePandasClient:
     return _client
 
 
-def _fetch_zone_today(zone_name: str, code: str, start, end) -> tuple:
+def _fetch_zone_today(zone_name: str, code: str, start, end, rate: float) -> tuple:
     """
     Henter dagens (og morgendagens) priser for én sone fra ENTSO-E.
     Returnerer (zone_name, result_dict). Brukes som worker i ThreadPoolExecutor.
+
+    `rate` er EUR→NOK-kursen, hentet én gang i fetch_today_prices() og sendt
+    inn hit, så vi konverterer alle prispunkter til øre/kWh på samme kurs.
     """
     try:
         client = get_client()
@@ -89,6 +110,7 @@ def _fetch_zone_today(zone_name: str, code: str, start, end) -> tuple:
             {
                 "timestamp": ts.isoformat(),
                 "price_eur_mwh": round(float(price), 2),
+                "price_ore_kwh": round(_eur_mwh_to_ore_kwh(float(price), rate), 2),
             }
             for ts, price in series.items()
         ]
@@ -96,6 +118,7 @@ def _fetch_zone_today(zone_name: str, code: str, start, end) -> tuple:
         return zone_name, {
             "zone": zone_name,
             "currency": "EUR/MWh",
+            "eur_nok_rate": round(rate, 4),
             "resolution": _detect_resolution(series),
             "prices": prices,
         }
@@ -136,6 +159,11 @@ def fetch_today_prices() -> dict:
     # 5 worker-tråder forsøker å lage den samtidig ved kald oppstart.
     get_client()
 
+    # Hent valutakursen ÉN gang her (cachet 24t i norges_bank_service), og
+    # send den inn i hver worker. Da konverteres alle 5 soner på nøyaktig
+    # samme kurs, og vi unngår 5 separate oppslag.
+    rate = norges_bank_service.get_eur_nok_rate()
+
     tz = "Europe/Oslo"
     now = pd.Timestamp.now(tz=tz)
     # Vindu: i dag 00:00 lokal tid → i overmorgen 00:00 lokal tid.
@@ -149,7 +177,7 @@ def fetch_today_prices() -> dict:
     # går wall-clock-tiden ned fra ~10 sek sekvensielt til ~2 sek totalt.
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = [
-            executor.submit(_fetch_zone_today, name, code, start, end)
+            executor.submit(_fetch_zone_today, name, code, start, end, rate)
             for name, code in ZONE_CODES.items()
         ]
         try:
@@ -229,7 +257,9 @@ def fetch_current_prices() -> dict:
         results[zone_name] = {
             "zone": zone_name,
             "price_eur_mwh": current["price_eur_mwh"],
+            "price_ore_kwh": current["price_ore_kwh"],
             "currency": data["currency"],
+            "eur_nok_rate": data.get("eur_nok_rate"),
             "timestamp": current["timestamp"],
             "resolution": data["resolution"],
         }

@@ -144,6 +144,13 @@
       margin-left: 4px;
       font-weight: 400;
     }
+    #prices .subprice {
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 400;
+      font-variant-numeric: tabular-nums;
+      margin-top: 1px;
+    }
 
     /* ---------- Legend ------------------------------------- */
     .legend-bar {
@@ -151,8 +158,8 @@
       border-radius: 2px;
       background: linear-gradient(to right,
         var(--c-low) 0%,
-        var(--c-mid) 40%,
-        var(--c-high) 70%,
+        var(--c-mid) 33%,
+        var(--c-high) 67%,
         var(--c-vhigh) 100%);
     }
     .legend-labels {
@@ -162,6 +169,12 @@
       font-size: 11px;
       color: var(--text-dim);
       font-variant-numeric: tabular-nums;
+    }
+    .legend-note {
+      margin-top: 8px;
+      font-size: 10.5px;
+      color: var(--text-dim);
+      letter-spacing: 0.2px;
     }
 
     /* ---------- Tooltip ------------------------------------ */
@@ -206,6 +219,12 @@
       font-size: 11px;
       font-weight: 400;
       margin-left: 4px;
+    }
+    .popup-subprice {
+      color: var(--text-dim);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
     }
     .popup-meta {
       color: var(--text-dim);
@@ -264,11 +283,12 @@
   </div>
 
   <div id="legend" class="panel">
-    <div class="subtitle" style="margin-bottom: 8px;">Spotpris (EUR/MWh)</div>
+    <div class="subtitle" style="margin-bottom: 8px;">Spotpris (øre/kWh)</div>
     <div class="legend-bar"></div>
     <div class="legend-labels">
       <span>0</span><span>50</span><span>100</span><span>150+</span>
     </div>
+    <div class="legend-note">Spotpris eks. mva og avgifter</div>
   </div>
 
   <div id="controls" class="panel">
@@ -315,13 +335,15 @@
     // ---------------------------------------------------------
     // 2) Fargeskala og styling
     // ---------------------------------------------------------
+    // Fargene følger nå øre/kWh — enheten nordmenn kjenner fra
+    // strømregningen. Terskler: 0 (grønn) / 50 (gul) / 100 (oransje)
+    // / 150+ (rød) øre/kWh. -1 er en "ingen data"-sentinel (grå).
     const PRICE_PAINT = [
       'interpolate', ['linear'],
-      ['coalesce', ['get', 'price_eur_mwh'], -1],
+      ['coalesce', ['get', 'price_ore_kwh'], -1],
       -1,  '#374151',
       0,   '#10b981',
-      30,  '#10b981',
-      60,  '#eab308',
+      50,  '#eab308',
       100, '#f97316',
       150, '#dc2626',
     ];
@@ -364,11 +386,12 @@
       ],
     };
 
+    // Tekstfarge for pris — samme terskler som fargeskalaen, i øre/kWh.
     function priceColor(p) {
       if (p == null) return '#374151';
-      if (p <= 30)  return '#10b981';
-      if (p <= 60)  return '#eab308';
-      if (p <= 100) return '#f97316';
+      if (p <= 50)  return '#10b981';
+      if (p <= 100) return '#eab308';
+      if (p <= 150) return '#f97316';
       return '#dc2626';
     }
 
@@ -433,7 +456,8 @@
         for (const f of zones.features) {
           const zoneName = f.properties.zoneName;
           const p = prices[zoneName];
-          if (p && p.price_eur_mwh != null) {
+          if (p && p.price_ore_kwh != null) {
+            f.properties.price_ore_kwh = p.price_ore_kwh;
             f.properties.price_eur_mwh = p.price_eur_mwh;
             f.properties.timestamp     = p.timestamp;
           }
@@ -561,12 +585,13 @@
       map.getCanvas().style.cursor = 'pointer';
       const f = e.features[0];
       const zone = f.properties.zoneName;
-      const price = f.properties.price_eur_mwh;
+      const priceOre = f.properties.price_ore_kwh;
+      const priceEur = f.properties.price_eur_mwh;
       const ts = f.properties.timestamp;
       const accent = ZONE_COLORS[zone] || '#6b7280';
       const region = ZONE_NAMES[zone] || '';
       const timeStr = ts ? new Date(ts).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' }) : '';
-      const priceColorTxt = priceColor(price);
+      const priceColorTxt = priceColor(priceOre);
       const sparkline = renderSparkline(todayPrices[zone], accent);
       
       zonePopup
@@ -577,9 +602,10 @@
             <div class="popup-region">${region}</div>
             <div class="popup-zone">${zone}</div>
             <div class="popup-price" style="color:${priceColorTxt}">
-              ${price != null ? price.toFixed(2) : '—'}
-              <span class="unit">EUR/MWh</span>
+              ${priceOre != null ? priceOre.toFixed(1) : '—'}
+              <span class="unit">øre/kWh</span>
             </div>
+            ${priceEur != null ? `<div class="popup-subprice">${priceEur.toFixed(2)} EUR/MWh</div>` : ''}
             ${sparkline}
             ${timeStr ? `<div class="popup-meta">${timeStr}</div>` : ''}
           </div>
@@ -598,7 +624,7 @@
       const W = 200, H = 40, padX = 2, padY = 4;
       const innerW = W - padX * 2, innerH = H - padY * 2;
       const times  = data.map(d => new Date(d.timestamp).getTime());
-      const prices = data.map(d => d.price_eur_mwh);
+      const prices = data.map(d => d.price_ore_kwh);
       const tMin = times[0],  tMax = times[times.length - 1];
       const pMin = Math.min(...prices), pMax = Math.max(...prices);
       const pRange = (pMax - pMin) || 1;
@@ -648,9 +674,10 @@
       const zoneOrder = ['NO1', 'NO2', 'NO3', 'NO4', 'NO5'];
       for (const z of zoneOrder) {
         const p = prices[z];
-        const price = p && p.price_eur_mwh != null ? p.price_eur_mwh : null;
+        const priceOre = p && p.price_ore_kwh != null ? p.price_ore_kwh : null;
+        const priceEur = p && p.price_eur_mwh != null ? p.price_eur_mwh : null;
         const zoneCol  = ZONE_COLORS[z] || '#6b7280';
-        const priceCol = priceColor(price);
+        const priceCol = priceColor(priceOre);
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="zone">
@@ -658,8 +685,9 @@
             ${z}
           </td>
           <td class="price" style="color:${priceCol}">
-            ${price != null ? price.toFixed(2) : '—'}
-            <span class="unit">EUR/MWh</span>
+            ${priceOre != null ? priceOre.toFixed(1) : '—'}
+            <span class="unit">øre/kWh</span>
+            ${priceEur != null ? `<div class="subprice">${priceEur.toFixed(2)} EUR/MWh</div>` : ''}
           </td>
         `;
         tbody.appendChild(tr);
