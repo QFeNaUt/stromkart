@@ -1,24 +1,31 @@
 """
 Strømkartet API
 ---------------
-FastAPI-app som leverer data om norske strømsoner og spotpriser,
-og serverer en enkel HTML-prototype fra frontend/prototype/.
+Backend-API for Strømkartet: norsk strømnett-visualisering med 
+priser, soner, og senere produksjon og avbrudd. Returnerer kun 
+JSON — frontend leveres separat fra Cloudflare Pages.
 
 Kjør lokalt:
     uvicorn app.main:app --reload --port 8000
 
 URL-er:
-    http://localhost:8000          → frontend-prototype (index.html)
     http://localhost:8000/api/...  → backend-endepunkter
     http://localhost:8000/docs     → Swagger UI
 """
-from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.routers import prices, zones
+
+# Tillatte origins for CORS. Stramt definert i stedet for "*" 
+# fordi vi nå serverer frontend fra en annen origin (Pages) 
+# enn backend (api-subdomenet). Dev-origins beholdt for lokal 
+# testing — kan fjernes/kommenteres ut i ren prod-deploy.
+ALLOWED_ORIGINS = [
+    "https://stromkart.no",          # prod (Cloudflare Pages)
+    "http://localhost:5500",         # dev: lokal frontend (python http.server / Live Server)
+    "http://127.0.0.1:5500",         # dev: samme, eksplisitt loopback
+]
 
 app = FastAPI(
     title="Strømkartet API",
@@ -28,8 +35,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # dev: tillat alt. Stram inn i produksjon.
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET"],   # vi serverer kun lesing — ingen POST/PUT/DELETE foreløpig
     allow_headers=["*"],
 )
 
@@ -42,15 +49,3 @@ app.include_router(zones.router, prefix="/api/zones", tags=["zones"])
 def health():
     """Helsesjekk."""
     return {"name": "Strømkartet API", "status": "ok"}
-
-
-# Statisk frontend — serverer index.html på /
-# NB: må monteres SIST, slik at /api/* fortsatt rutes til routerne over.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-FRONTEND_DIR = PROJECT_ROOT / "frontend" / "prototype"
-if FRONTEND_DIR.exists():
-    app.mount(
-        "/",
-        StaticFiles(directory=FRONTEND_DIR, html=True),
-        name="frontend",
-    )
