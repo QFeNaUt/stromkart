@@ -281,6 +281,15 @@
 
   <script>
     // ---------------------------------------------------------
+    // 0) Konfigurasjon
+    // ---------------------------------------------------------
+    // Backend serveres separat fra Cloudflare Tunnel (LXC),
+    // mens frontend hostes på Cloudflare Pages. Bytt linjen
+    // under for lokal utvikling mot uvicorn på 127.0.0.1:8000.
+    const API_BASE = 'https://api.stromkart.no';
+    // const API_BASE = 'http://localhost:8000';  // dev
+
+    // ---------------------------------------------------------
     // 1) Kart med CARTO Dark Matter
     // ---------------------------------------------------------
     const map = new maplibregl.Map({
@@ -407,9 +416,9 @@
         
         // Bruk den nye retry-funksjonen for å hente data
         const [zonesRes, pricesRes, todayRes] = await Promise.all([
-          fetchWithRetry('/api/zones/'),
-          fetchWithRetry('/api/prices/current'),
-          fetchWithRetry('/api/prices/today'),
+          fetchWithRetry(`${API_BASE}/api/zones/`),
+          fetchWithRetry(`${API_BASE}/api/prices/current`),
+          fetchWithRetry(`${API_BASE}/api/prices/today`),
         ]);
 
         if (!zonesRes.ok)  throw new Error(`/api/zones returned ${zonesRes.status}`);
