@@ -345,6 +345,13 @@
       if (!map.hasImage('flow-arrow')) {
         map.addImage('flow-arrow', createArrowIcon(28));
       }
+      // Registrer landflagg-ikoner én gang. Symbol-laget refererer til
+      // dem via ['concat', 'flag-', ['get', 'country']] = 'flag-SE' osv.
+      ['SE', 'FI', 'DK', 'DE', 'NL', 'GB'].forEach(code => {
+        if (!map.hasImage(`flag-${code}`)) {
+          map.addImage(`flag-${code}`, createFlagIcon(code));
+        }
+      });
       if (zonesData) addOverlays();
     });
 
@@ -499,6 +506,93 @@
     }
 
     /**
+     * Tegner et lite landflagg (24×18 px) på canvas og returnerer som
+     * ImageData. Hvert flagg får en mørk 1px-ramme for kontrast mot
+     * dark-basemap. Brukes som ikoner ved utenlandske endepunkter på
+     * kraftflyt-laget — viser med ett blikk hvilket land en kabel
+     * eller AC-grense leder til.
+     *
+     * Designet er forenklet — på 22×16 px (innenfor rammen) er det
+     * umulig å gjengi detaljert heraldikk. Målet er gjenkjennelighet:
+     * de viktige fargene og hovedstrukturen.
+     *
+     * Støttede koder: SE, FI, DK, DE, NL, GB.
+     * Mapping fra ENTSO-E-soner skjer i frontend (SE_1 → SE osv.).
+     */
+    function createFlagIcon(country) {
+      const W = 24, H = 18;
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+
+      // Mørk ramme rundt hele flagget — 1px synlig ved kanten
+      ctx.fillStyle = '#0d1117';
+      ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.translate(1, 1);
+      // Innenfor rammen: 22×16
+
+      if (country === 'SE') {
+        // Sverige — blå med gult kors (kors-senter ved x=8 av 22)
+        ctx.fillStyle = '#004B87'; ctx.fillRect(0, 0, 22, 16);
+        ctx.fillStyle = '#FFCD00';
+        ctx.fillRect(7, 0, 3, 16);   // vertikal stripe
+        ctx.fillRect(0, 6, 22, 3);   // horisontal stripe
+      } else if (country === 'FI') {
+        // Finland — hvit med blått kors
+        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 22, 16);
+        ctx.fillStyle = '#002F6C';
+        ctx.fillRect(7, 0, 3, 16);
+        ctx.fillRect(0, 6, 22, 3);
+      } else if (country === 'DK') {
+        // Danmark — rød med hvitt kors
+        ctx.fillStyle = '#C60C30'; ctx.fillRect(0, 0, 22, 16);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(7, 0, 3, 16);
+        ctx.fillRect(0, 6, 22, 3);
+      } else if (country === 'DE') {
+        // Tyskland — sort, rød, gul horisontalt
+        ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, 22, 5);
+        ctx.fillStyle = '#DD0000'; ctx.fillRect(0, 5, 22, 6);
+        ctx.fillStyle = '#FFCE00'; ctx.fillRect(0, 11, 22, 5);
+      } else if (country === 'NL') {
+        // Nederland — rød, hvit, blå horisontalt
+        ctx.fillStyle = '#AE1C28'; ctx.fillRect(0, 0, 22, 5);
+        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 5, 22, 6);
+        ctx.fillStyle = '#21468B'; ctx.fillRect(0, 11, 22, 5);
+      } else if (country === 'GB') {
+        // Forenklet Union Jack: blå bunn med hvitt+rødt kors og diagonaler
+        ctx.fillStyle = '#012169'; ctx.fillRect(0, 0, 22, 16);
+        // Hvite diagonaler først
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);  ctx.lineTo(22, 16);
+        ctx.moveTo(22, 0); ctx.lineTo(0, 16);
+        ctx.stroke();
+        // Røde diagonaler over (tynnere)
+        ctx.strokeStyle = '#C8102E';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);  ctx.lineTo(22, 16);
+        ctx.moveTo(22, 0); ctx.lineTo(0, 16);
+        ctx.stroke();
+        // Hvitt kors over diagonalene
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(8, 0, 6, 16);
+        ctx.fillRect(0, 5, 22, 6);
+        // Rødt kors innerst
+        ctx.fillStyle = '#C8102E';
+        ctx.fillRect(9, 0, 4, 16);
+        ctx.fillRect(0, 6, 22, 4);
+      }
+
+      ctx.restore();
+      return ctx.getImageData(0, 0, W, H);
+    }
+
+    /**
      * Bygger en GeoJSON FeatureCollection av kraftflyt-edges fra backend.
      * Hver edge har sine egne from_point/to_point — backend velger fysisk
      * realistiske endepunkter (omformerstasjoner, transformatorstasjoner),
@@ -559,8 +653,53 @@
       return { type: 'FeatureCollection', features };
     }
 
+    /**
+     * Bygger en GeoJSON FeatureCollection av landflagg ved utenlandske
+     * endepunkter på kraftflyt-laget. Hver utenlandsk forbindelse får ett
+     * Point-feature med `country` ('SE', 'FI', 'DK', 'DE', 'NL', 'GB').
+     *
+     * Bestemmelse av "den utenlandske enden": vi tar den enden hvis sone-
+     * kode IKKE begynner med 'NO_'. Internflyt (begge ender norske) ignoreres.
+     * Sone-koden konverteres til 2-bokstavs landkode ved å ta delen før
+     * første '_' — så SE_1, SE_2, SE_3 alle blir 'SE'; DK_1 blir 'DK';
+     * mens GB, NL, FI er allerede 2-bokstavs og passerer som de er.
+     */
+    function buildFlagGeoJSON(payload) {
+      if (!payload || !payload.edges) {
+        return { type: 'FeatureCollection', features: [] };
+      }
+      const isNorwegian = (z) => z && z.startsWith('NO_');
+
+      const features = [];
+      for (const e of payload.edges) {
+        if (e.kind !== 'external') continue;
+        if (!e.from_point || !e.to_point) continue;
+
+        // Identifiser den utenlandske enden
+        let foreignZone, foreignPoint;
+        if (!isNorwegian(e.from)) {
+          foreignZone = e.from;  foreignPoint = e.from_point;
+        } else if (!isNorwegian(e.to)) {
+          foreignZone = e.to;    foreignPoint = e.to_point;
+        } else {
+          continue;  // begge ender norske (skal ikke skje ved external)
+        }
+
+        const countryCode = foreignZone.split('_')[0];
+        // Hopp over hvis vi ikke har et ikon for landet (defensiv sjekk)
+        if (!['SE', 'FI', 'DK', 'DE', 'NL', 'GB'].includes(countryCode)) continue;
+
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: foreignPoint },
+          properties: { country: countryCode, cable: e.cable || '' },
+        });
+      }
+      return { type: 'FeatureCollection', features };
+    }
+
     // ---------------------------------------------------------
-    // NYTT: Robust Fetch-funksjon (Håndterer Altibox/Cloudflare-hikke)
+    // Robust fetch-funksjon (håndterer Altibox/Cloudflare-hikke)
     // ---------------------------------------------------------
     async function fetchWithRetry(url, retries = 3, backoffMs = 2000) {
       for (let i = 0; i < retries; i++) {
@@ -589,6 +728,7 @@
     let todayPrices = {};
     let zonesData = null;
     let flowsData = null;
+    let flowsFlagsData = null;  // separat GeoJSON for utenlandsk-flagg på flyt-laget
     let overlayHandlersAttached = false;
     let initialFitDone = false;
     let spotPriceVisible = true;
@@ -765,6 +905,7 @@
       // dem dempet og merker tooltip-en eksplisitt.
       flowsIsStale = payload?.is_stale === true;
       flowsData = buildFlowGeoJSON(payload);
+      flowsFlagsData = buildFlagGeoJSON(payload);
       if (mapLoaded) addFlowLayers();
     }
 
@@ -842,6 +983,39 @@
       const lineOpacity = flowsIsStale ? FLOW_OPACITY_STALE : FLOW_OPACITY;
       map.setPaintProperty('flows-line',  'line-opacity', lineOpacity);
       map.setPaintProperty('flows-arrow', 'icon-opacity', lineOpacity);
+
+      // -------------------------------------------------------------
+      // Landflagg ved utenlandske endepunkter
+      // -------------------------------------------------------------
+      // Egen source og symbol-lag — flaggene er statiske geografiske
+      // markører, ikke datadrevne, så de dempes IKKE ved stale data.
+      // Pil-laget og linje-laget signaliserer staleness alene.
+      if (flowsFlagsData) {
+        const flagSrc = map.getSource('flows-flags');
+        if (flagSrc) {
+          flagSrc.setData(flowsFlagsData);
+        } else {
+          map.addSource('flows-flags', { type: 'geojson', data: flowsFlagsData });
+        }
+
+        if (!map.getLayer('flows-flags-layer')) {
+          map.addLayer({
+            id: 'flows-flags-layer',
+            type: 'symbol',
+            source: 'flows-flags',
+            layout: {
+              // Konstruerer ikon-navn dynamisk: 'flag-SE', 'flag-DE' osv.
+              'icon-image': ['concat', 'flag-', ['get', 'country']],
+              'icon-size': 1,
+              // Offset 14 px oppover i skjermkoordinater — løfter flagget
+              // litt over selve endepunkts-pilen så de ikke overlapper.
+              'icon-offset': [0, -14],
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            },
+          }, beforeId);
+        }
+      }
     }
 
     function handleFlowHover(e) {
@@ -892,8 +1066,9 @@
       if (map.getLayer('zones-line')) map.setLayoutProperty('zones-line', 'visibility', zonesV);
 
       const flowsV = flowsVisible ? 'visible' : 'none';
-      if (map.getLayer('flows-line'))  map.setLayoutProperty('flows-line',  'visibility', flowsV);
-      if (map.getLayer('flows-arrow')) map.setLayoutProperty('flows-arrow', 'visibility', flowsV);
+      if (map.getLayer('flows-line'))         map.setLayoutProperty('flows-line',         'visibility', flowsV);
+      if (map.getLayer('flows-arrow'))        map.setLayoutProperty('flows-arrow',        'visibility', flowsV);
+      if (map.getLayer('flows-flags-layer'))  map.setLayoutProperty('flows-flags-layer',  'visibility', flowsV);
     }
 
     function setFlowsVisible(visible) {
