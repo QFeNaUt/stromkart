@@ -100,10 +100,12 @@ CONNECTIONS = [
      "b_point": [15.46, 65.97]},  # Ajaure
 
     # ----- AC mot Finland -----
-    # NO_4 ↔ FI: Varangerbotn–Ivalo
+    # NO_4 ↔ FI: Varangerbotn–Ivalo, eneste direkte AC-sammenkobling
+    # mellom Norge og Finland (220 kV-linje). Eier Statnett på norsk
+    # side, Fingrid på finsk.
     {"a": "NO_4", "b": "FI", "kind": "external", "cable": None,
-     "a_point": [28.93, 70.18],   # Varangerbotn, Finnmark
-     "b_point": [27.55, 68.66]},  # Ivalo
+     "a_point": [28.5444, 70.1703],   # Varangerbotn transformatorstasjon, Nesseby
+     "b_point": [27.5653, 68.6467]},  # Ivalo sähköasema, Inari/Enare
 
     # ----- HVDC-sjøkabler — ender ved faktiske omformerstasjoner -----
     # Skagerrak 1–4: NO_2 ↔ DK_1
