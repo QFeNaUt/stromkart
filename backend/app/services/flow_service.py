@@ -49,13 +49,24 @@ ZONE_CENTROIDS = {
 # Forbindelser med fysiske endepunkter
 # --------------------------------------------------------------------------
 CONNECTIONS = [
-    # ----- Internt Norge — bruker sone-sentroider -----
-    {"a": "NO_1", "b": "NO_2", "kind": "internal", "cable": None},
-    {"a": "NO_1", "b": "NO_3", "kind": "internal", "cable": None},
-    {"a": "NO_1", "b": "NO_5", "kind": "internal", "cable": None},
-    {"a": "NO_2", "b": "NO_5", "kind": "internal", "cable": None},
-    {"a": "NO_3", "b": "NO_4", "kind": "internal", "cable": None},
-    {"a": "NO_3", "b": "NO_5", "kind": "internal", "cable": None},
+    # ----- Internt Norge — korte piler ved sonegrensene -----
+    # Tidligere falt vi tilbake på ZONE_CENTROIDS, som ga lange grå streker
+    # tvers gjennom Norge som konkurrerte visuelt med spotpris-fargingen.
+    # Nå plasseres a_point/b_point eksplisitt nær den faktiske grensen
+    # mellom hvert par av soner, à la Electricity Maps. Hver pil blir
+    # ~50–100 km lang og sitter i grenseområdet, ikke tvers gjennom landet.
+    {"a": "NO_1", "b": "NO_2", "kind": "internal", "cable": None,
+     "a_point": [8.5, 59.6],   "b_point": [8.0, 59.1]},   # Telemark/Agder
+    {"a": "NO_1", "b": "NO_3", "kind": "internal", "cable": None,
+     "a_point": [10.8, 62.2],  "b_point": [10.5, 62.8]},  # Hedmark/Sør-Trøndelag
+    {"a": "NO_1", "b": "NO_5", "kind": "internal", "cable": None,
+     "a_point": [8.2, 60.5],   "b_point": [7.5, 60.5]},   # Hallingdal/Hardangervidda
+    {"a": "NO_2", "b": "NO_5", "kind": "internal", "cable": None,
+     "a_point": [6.5, 59.3],   "b_point": [6.3, 59.7]},   # Boknafjord/Ryfylke
+    {"a": "NO_3", "b": "NO_4", "kind": "internal", "cable": None,
+     "a_point": [13.5, 65.0],  "b_point": [14.0, 65.8]},  # Helgeland
+    {"a": "NO_3", "b": "NO_5", "kind": "internal", "cable": None,
+     "a_point": [7.0, 62.3],   "b_point": [6.7, 61.7]},   # Møre/Vestland-grensen
 
     # ----- AC mot Sverige — ender ved faktiske transformatorstasjoner -----
     {"a": "NO_1", "b": "SE_3", "kind": "external", "cable": None,
