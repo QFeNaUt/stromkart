@@ -297,6 +297,10 @@
       <input type="checkbox" id="toggle-spotpris" checked>
       <span>Spotpris</span>
     </label>
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggle-flyt" checked>
+      <span>Kraftflyt</span>
+    </label>
   </div>
 
   <script>
@@ -396,6 +400,97 @@
     }
 
     // ---------------------------------------------------------
+    // 2b) Kraftflyt — farger, tykkelse og geometri
+    // ---------------------------------------------------------
+    // Farge per "direction":
+    //   export   = strøm forlater Norge (varm oransje)
+    //   import   = strøm inn til Norge  (kjølig turkis)
+    //   internal = mellom norske soner  (nøytral lilla)
+    // Vi setter direction PER FEATURE i buildFlowGeoJSON, så MapLibre
+    // kan style direkte med ['get', 'direction']. Dette er datadrevet
+    // styling — ingen if/else i render-koden.
+    const FLOW_COLORS = {
+      export:   '#f97316',  // samme varme som "dyr pris"
+      import:   '#06b6d4',  // cyan/turkis — tydelig kontrast til prisfargene
+      internal: '#9ca3af',  // dempet grå-lilla — leses som "ikke ut/inn"
+    };
+
+    // Linjebredde mappet fra MW. Skala 50→1400 dekker både små internflyter
+    // og NordLink/NSL-kabler ved full kapasitet (~1400 MW). Vi clamper i
+    // begge ender så veldig små eller veldig store tall blir lesbare.
+    const FLOW_WIDTH = [
+      'interpolate', ['linear'], ['coalesce', ['get', 'mw'], 0],
+      0,    1.0,
+      50,   1.5,
+      400,  3.0,
+      1000, 5.0,
+      1400, 6.5,
+    ];
+
+    // Internflyt får lavere opasitet — to grunner: (1) det er svakere "story"
+    // enn import/eksport, så det skal ikke konkurrere visuelt; (2) opasitet
+    // i kombinasjon med dempet farge gjør at piler IKKE leses som varme/kalde
+    // (som vi reserverer for utlandskabler).
+    const FLOW_OPACITY = [
+      'case',
+      ['==', ['get', 'direction'], 'internal'], 0.55,
+      0.90,
+    ];
+
+    /**
+     * Bygger en GeoJSON FeatureCollection av kraftflyt-edges fra backend.
+     * Hver edge blir én LineString fra `from`-endepunkt til `to`-endepunkt,
+     * med properties som driver styling og hover-tooltip.
+     *
+     * `direction` bestemmes her: edges der nøyaktig én ende er en norsk sone
+     * blir "export" (NO→ute) eller "import" (ute→NO). Alt annet er "internal".
+     */
+    function buildFlowGeoJSON(payload) {
+      if (!payload || !payload.edges || !payload.endpoints) {
+        return { type: 'FeatureCollection', features: [] };
+      }
+      const { edges, endpoints } = payload;
+      const isNorwegian = (z) => z && z.startsWith('NO_');
+
+      const features = [];
+      for (const e of edges) {
+        const fromPt = endpoints[e.from];
+        const toPt   = endpoints[e.to];
+        if (!fromPt || !toPt) continue;  // mangler koordinat → hopp over
+
+        let direction;
+        if (e.kind === 'internal') {
+          direction = 'internal';
+        } else if (isNorwegian(e.from) && !isNorwegian(e.to)) {
+          direction = 'export';  // strøm fra norsk sone til utlandet
+        } else if (!isNorwegian(e.from) && isNorwegian(e.to)) {
+          direction = 'import';  // strøm fra utlandet til norsk sone
+        } else {
+          direction = 'internal';  // skal i praksis ikke skje
+        }
+
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [fromPt, toPt],
+          },
+          properties: {
+            id: e.id,
+            from: e.from,
+            to: e.to,
+            mw: e.mw,
+            kind: e.kind,
+            cable: e.cable,
+            direction,
+            timestamp: e.timestamp,
+          },
+        });
+      }
+      return { type: 'FeatureCollection', features };
+    }
+
+    // ---------------------------------------------------------
     // NYTT: Robust Fetch-funksjon (Håndterer Altibox/Cloudflare-hikke)
     // ---------------------------------------------------------
     async function fetchWithRetry(url, retries = 3, backoffMs = 2000) {
@@ -424,11 +519,16 @@
     // ---------------------------------------------------------
     let todayPrices = {};
     let zonesData = null;
+    let flowsData = null;
     let overlayHandlersAttached = false;
     let initialFitDone = false;
     let spotPriceVisible = true;
+    let flowsVisible = true;
 
     const zonePopup = new maplibregl.Popup({
+      closeButton: false, closeOnClick: false, offset: 8,
+    });
+    const flowPopup = new maplibregl.Popup({
       closeButton: false, closeOnClick: false, offset: 8,
     });
 
@@ -438,19 +538,24 @@
         errorDiv.textContent = ''; // Tøm evt gammel feilmelding
         
         // Bruk den nye retry-funksjonen for å hente data
-        const [zonesRes, pricesRes, todayRes] = await Promise.all([
+        const [zonesRes, pricesRes, todayRes, flowsRes] = await Promise.all([
           fetchWithRetry(`${API_BASE}/api/zones/`),
           fetchWithRetry(`${API_BASE}/api/prices/current`),
           fetchWithRetry(`${API_BASE}/api/prices/today`),
+          fetchWithRetry(`${API_BASE}/api/flows/current`),
         ]);
 
         if (!zonesRes.ok)  throw new Error(`/api/zones returned ${zonesRes.status}`);
         if (!pricesRes.ok) throw new Error(`/api/prices/current returned ${pricesRes.status}`);
         if (!todayRes.ok)  console.warn(`/api/prices/today returned ${todayRes.status}`);
+        // Flyt er en "nice to have" — hele kartet skal fungere selv om
+        // ENTSO-E svikter for én eller flere grenser. Vi logger og går videre.
+        if (!flowsRes.ok)  console.warn(`/api/flows/current returned ${flowsRes.status}`);
 
         const zones  = await zonesRes.json();
         const prices = await pricesRes.json();
         todayPrices  = todayRes.ok ? await todayRes.json() : {};
+        const flows  = flowsRes.ok ? await flowsRes.json() : null;
 
         // Slå sammen pris inn i hver feature
         for (const f of zones.features) {
@@ -465,6 +570,7 @@
 
         renderMap(zones);
         renderTable(zones, prices);
+        renderFlows(flows);
 
       } catch (err) {
         document.getElementById('error').textContent = 'Venter på nettverk... Klarte ikke å hente ferske data.';
@@ -524,8 +630,7 @@
       // Byer
       if (!map.getSource('cities')) {
         map.addSource('cities', { type: 'geojson', data: CITIES });
-      }
-      if (!map.getLayer('cities-dot')) {
+      }      if (!map.getLayer('cities-dot')) {
         map.addLayer({
           id: 'cities-dot',
           type: 'circle',
@@ -560,19 +665,166 @@
         });
       }
 
+      // Kraftflyt: idempotent — lagene opprettes første gang og oppdateres
+      // ved data-refresh. Krever at flowsData er satt (renderFlows kalles
+      // fra loadData, og en evt. race vinnes av addOverlays når kartet
+      // ferdiglastes etter at data har kommet inn).
+      if (flowsData) addFlowLayers();
+
       updateOverlayVisibility();
 
       if (!overlayHandlersAttached) {
         map.on('mousemove', 'zones-fill', handleZoneHover);
         map.on('mouseleave', 'zones-fill', handleZoneLeave);
+        map.on('mousemove', 'flows-line', handleFlowHover);
+        map.on('mouseleave', 'flows-line', handleFlowLeave);
         overlayHandlersAttached = true;
       }
+    }
+
+    // -------------------------------------------------------------
+    // Kraftflyt-rendering
+    // -------------------------------------------------------------
+    // Strategien er den samme som for soner: state lagres globalt
+    // (`flowsData`), og lag/kilde opprettes/oppdateres via en idempotent
+    // `addFlowLayers()` som kan kalles flere ganger uten å duplisere noe.
+    function renderFlows(payload) {
+      flowsData = buildFlowGeoJSON(payload);
+      if (mapLoaded) addFlowLayers();
+    }
+
+    function addFlowLayers() {
+      if (!flowsData) return;
+
+      const src = map.getSource('flows');
+      if (src) {
+        src.setData(flowsData);
+      } else {
+        map.addSource('flows', { type: 'geojson', data: flowsData });
+      }
+
+      // Linje-lag: tegner selve flyt-strekene mellom endepunktene.
+      // Plasseres OVER zones-fill (så pilene synes) men UNDER cities-label
+      // (så bynavn ikke skjules). MapLibre's "beforeId" gir oss kontroll
+      // over rekkefølgen uten å måtte fjerne og legge til alt på nytt.
+      const beforeId = map.getLayer('cities-dot') ? 'cities-dot' : undefined;
+
+      if (!map.getLayer('flows-line')) {
+        map.addLayer({
+          id: 'flows-line',
+          type: 'line',
+          source: 'flows',
+          layout: {
+            'line-cap':  'round',
+            'line-join': 'round',
+          },
+          paint: {
+            'line-color': [
+              'match', ['get', 'direction'],
+              'export',   FLOW_COLORS.export,
+              'import',   FLOW_COLORS.import,
+              'internal', FLOW_COLORS.internal,
+              FLOW_COLORS.internal,
+            ],
+            'line-width':   FLOW_WIDTH,
+            'line-opacity': FLOW_OPACITY,
+          },
+        }, beforeId);
+      }
+
+      // Pilhode-lag: symbol-lag med Unicode-trekant som auto-roteres
+      // langs linjen. `symbol-placement: 'line-center'` legger ÉN pil
+      // midt på hver strek — enkelt og leselig. For lange utlandskabler
+      // kunne man brukt 'line' + 'symbol-spacing' for å få flere piler,
+      // men én pil per edge er mer ryddig på et oversiktskart.
+      if (!map.getLayer('flows-arrow')) {
+        map.addLayer({
+          id: 'flows-arrow',
+          type: 'symbol',
+          source: 'flows',
+          layout: {
+            'symbol-placement':   'line-center',
+            'text-field':         '▶',
+            'text-font':          ['Open Sans Regular'],
+            'text-size': [
+              'interpolate', ['linear'], ['coalesce', ['get', 'mw'], 0],
+              0,    10,
+              400,  14,
+              1400, 18,
+            ],
+            'text-keep-upright':  false,  // la pilen rotere fritt med linja
+            'text-rotation-alignment': 'map',
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+          },
+          paint: {
+            'text-color': [
+              'match', ['get', 'direction'],
+              'export',   FLOW_COLORS.export,
+              'import',   FLOW_COLORS.import,
+              'internal', FLOW_COLORS.internal,
+              FLOW_COLORS.internal,
+            ],
+            'text-halo-color': '#0d1117',
+            'text-halo-width': 1.5,
+            'text-opacity': FLOW_OPACITY,
+          },
+        }, beforeId);
+      }
+    }
+
+    function handleFlowHover(e) {
+      map.getCanvas().style.cursor = 'pointer';
+      const f = e.features[0];
+      const p = f.properties;
+      const color = FLOW_COLORS[p.direction] || FLOW_COLORS.internal;
+      const directionLabel = {
+        export:   'Eksport',
+        import:   'Import',
+        internal: 'Internflyt',
+      }[p.direction] || 'Flyt';
+      const cableLine = p.cable ? `<div class="popup-region">${p.cable}</div>` : '';
+      const timeStr = p.timestamp
+        ? new Date(p.timestamp).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' })
+        : '';
+
+      flowPopup
+        .setLngLat(e.lngLat)
+        .setHTML(`
+          <div class="popup-accent" style="background:${color}"></div>
+          <div class="popup-body">
+            ${cableLine}
+            <div class="popup-zone">${p.from} → ${p.to}</div>
+            <div class="popup-price" style="color:${color}">
+              ${Number(p.mw).toFixed(0)}
+              <span class="unit">MW</span>
+            </div>
+            <div class="popup-subprice">${directionLabel}</div>
+            ${timeStr ? `<div class="popup-meta">${timeStr}</div>` : ''}
+          </div>
+        `)
+        .addTo(map);
+    }
+
+    function handleFlowLeave() {
+      map.getCanvas().style.cursor = '';
+      flowPopup.remove();
     }
 
     function updateOverlayVisibility() {
       const zonesV = spotPriceVisible ? 'visible' : 'none';
       if (map.getLayer('zones-fill')) map.setLayoutProperty('zones-fill', 'visibility', zonesV);
       if (map.getLayer('zones-line')) map.setLayoutProperty('zones-line', 'visibility', zonesV);
+
+      const flowsV = flowsVisible ? 'visible' : 'none';
+      if (map.getLayer('flows-line'))  map.setLayoutProperty('flows-line',  'visibility', flowsV);
+      if (map.getLayer('flows-arrow')) map.setLayoutProperty('flows-arrow', 'visibility', flowsV);
+    }
+
+    function setFlowsVisible(visible) {
+      flowsVisible = visible;
+      updateOverlayVisibility();
+      if (!visible) flowPopup.remove();
     }
 
     function setSpotPriceVisible(visible) {
@@ -696,6 +948,9 @@
 
     document.getElementById('toggle-spotpris').addEventListener('change', (e) => {
       setSpotPriceVisible(e.target.checked);
+    });
+    document.getElementById('toggle-flyt').addEventListener('change', (e) => {
+      setFlowsVisible(e.target.checked);
     });
 
     loadData();
