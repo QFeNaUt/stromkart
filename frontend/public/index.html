@@ -333,6 +333,11 @@
     let mapLoaded = false;
     map.on('load', () => {
       mapLoaded = true;
+      // Registrer pil-ikonet i kartets bilde-cache én gang. Lagene under
+      // refererer til det via 'icon-image': 'flow-arrow'.
+      if (!map.hasImage('flow-arrow')) {
+        map.addImage('flow-arrow', createArrowIcon(28));
+      }
       if (zonesData) addOverlays();
     });
 
@@ -438,25 +443,63 @@
     ];
 
     /**
-     * Bygger en GeoJSON FeatureCollection av kraftflyt-edges fra backend.
-     * Hver edge blir én LineString fra `from`-endepunkt til `to`-endepunkt,
-     * med properties som driver styling og hover-tooltip.
+     * Lager et pilhode-ikon på canvas og returnerer det som ImageData.
+     * Vi gjorde tidligere et forsøk med Unicode-tegn (▶ og →) i et symbol-
+     * layer, men CARTOs Open Sans-glyph-server mangler dem — pilhodene
+     * ble usynlige uten feilmelding. Canvas er font-uavhengig og virker
+     * alltid.
      *
-     * `direction` bestemmes her: edges der nøyaktig én ende er en norsk sone
-     * blir "export" (NO→ute) eller "import" (ute→NO). Alt annet er "internal".
+     * Ikonet peker mot HØYRE som default; MapLibre roterer det automatisk
+     * langs linjen via 'icon-rotation-alignment: map'.
+     */
+    function createArrowIcon(size = 28) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      // Mørk halo først — gir kontrast mot lyse linjer (oransje eksport)
+      ctx.fillStyle = '#0d1117';
+      ctx.beginPath();
+      ctx.moveTo(size * 0.10, size * 0.20);
+      ctx.lineTo(size * 0.95, size * 0.50);
+      ctx.lineTo(size * 0.10, size * 0.80);
+      ctx.lineTo(size * 0.28, size * 0.50);
+      ctx.closePath();
+      ctx.fill();
+
+      // Hvit pil over — selve pilhodet er litt mindre enn haloen
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(size * 0.18, size * 0.28);
+      ctx.lineTo(size * 0.85, size * 0.50);
+      ctx.lineTo(size * 0.18, size * 0.72);
+      ctx.lineTo(size * 0.34, size * 0.50);
+      ctx.closePath();
+      ctx.fill();
+
+      return ctx.getImageData(0, 0, size, size);
+    }
+
+    /**
+     * Bygger en GeoJSON FeatureCollection av kraftflyt-edges fra backend.
+     * Hver edge har sine egne from_point/to_point — backend velger fysisk
+     * realistiske endepunkter (omformerstasjoner, transformatorstasjoner),
+     * så vi trenger ikke gjøre noe sentroidoppslag her.
+     *
+     * `direction` bestemmes her: edges der nøyaktig én ende er en norsk
+     * sone blir "export" (NO→ute) eller "import" (ute→NO). Alt annet er
+     * "internal".
      */
     function buildFlowGeoJSON(payload) {
-      if (!payload || !payload.edges || !payload.endpoints) {
+      if (!payload || !payload.edges) {
         return { type: 'FeatureCollection', features: [] };
       }
-      const { edges, endpoints } = payload;
       const isNorwegian = (z) => z && z.startsWith('NO_');
 
       const features = [];
-      for (const e of edges) {
-        const fromPt = endpoints[e.from];
-        const toPt   = endpoints[e.to];
-        if (!fromPt || !toPt) continue;  // mangler koordinat → hopp over
+      for (const e of payload.edges) {
+        if (!e.from_point || !e.to_point) continue;  // ingen geometri → hopp
 
         let direction;
         if (e.kind === 'internal') {
@@ -473,7 +516,7 @@
           type: 'Feature',
           geometry: {
             type: 'LineString',
-            coordinates: [fromPt, toPt],
+            coordinates: [e.from_point, e.to_point],
           },
           properties: {
             id: e.id,
@@ -732,44 +775,31 @@
         }, beforeId);
       }
 
-      // Pilhode-lag: symbol-lag med Unicode-trekant som auto-roteres
-      // langs linjen. `symbol-placement: 'line-center'` legger ÉN pil
-      // midt på hver strek — enkelt og leselig. For lange utlandskabler
-      // kunne man brukt 'line' + 'symbol-spacing' for å få flere piler,
-      // men én pil per edge er mer ryddig på et oversiktskart.
+      // Pilhode-lag: bruker et canvas-generert ikon (registrert tidligere
+      // via map.addImage('flow-arrow', ...)). 'line-center' legger ÉN pil
+      // midt på hver strek, og 'icon-rotation-alignment: map' sørger for at
+      // pilen roterer langs linjen i kartrommet — den følger alltid retningen
+      // fra `from_point` til `to_point` slik backend har orientert dem.
       if (!map.getLayer('flows-arrow')) {
         map.addLayer({
           id: 'flows-arrow',
           type: 'symbol',
           source: 'flows',
           layout: {
-            'symbol-placement':   'line-center',
-            // Vi bruker → (U+2192 RIGHTWARDS ARROW) i stedet for ▶ fordi
-            // sistnevnte ligger i Unicode-blokken "Geometric Shapes" som
-            // CARTO sin Open Sans-glyph-server ofte mangler. MapLibre tegner
-            // ingenting når glyfen mangler — ingen feilmelding, bare usynlig
-            // resultat. Pilen → er i "Arrows"-blokken og er garantert med.
-            'text-field':         '→',
-            'text-font':          ['Open Sans Regular'],
-            'text-size': [
+            'symbol-placement':        'line-center',
+            'icon-image':              'flow-arrow',
+            'icon-rotation-alignment': 'map',
+            'icon-allow-overlap':      true,
+            'icon-ignore-placement':   true,
+            'icon-size': [
               'interpolate', ['linear'], ['coalesce', ['get', 'mw'], 0],
-              0,    14,
-              400,  18,
-              1400, 24,
+              0,    0.55,
+              400,  0.85,
+              1400, 1.20,
             ],
-            'text-keep-upright':  false,
-            'text-rotation-alignment': 'map',
-            'text-allow-overlap': true,
-            'text-ignore-placement': true,
           },
           paint: {
-            // Hvit pil med mørk halo gir maks lesbarhet over alle linjefarger.
-            // Linjefargen under formidler retning-betydningen (eksport/import/
-            // intern), så pilen selv trenger bare å vise selve retningen.
-            'text-color': '#ffffff',
-            'text-halo-color': '#0d1117',
-            'text-halo-width': 2.0,
-            'text-opacity': FLOW_OPACITY,
+            'icon-opacity': FLOW_OPACITY,
           },
         }, beforeId);
       }

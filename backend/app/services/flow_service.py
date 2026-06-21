@@ -21,9 +21,12 @@ Mens spotpriser har 5 sone-kall, har vi her 15 grenser × 2 retninger =
   - Aggressiv cache (1t TTL): flyt-data er hourly og oppdateres relativt
     sjelden. Vi bryr oss om "sist publiserte time", ikke realtid.
 
-Returnerer en liste av "edges" der hver edge er orientert i flytretningen
-(positivt MW-tall, `from` = der strømmen kommer fra, `to` = der den går),
-pluss et endepunkts-kart med koordinater for tegning i frontend.
+Endepunktene er fysisk realistiske: HVDC-kabler ender ved faktiske
+omformerstasjoner/landtak (Feda, Eemshaven, Tonstad, Wilster osv.),
+AC-forbindelser ender ved de norske og svenske/finske transformator-
+stasjonene som faktisk er knyttet sammen. Dette gir et kart som speiler
+hvor kraftutvekslingen geografisk skjer, ikke bare hvilke soner som
+utveksler.
 """
 import concurrent.futures
 import os
@@ -34,73 +37,95 @@ import pandas as pd
 from entsoe import EntsoePandasClient
 
 # --------------------------------------------------------------------------
-# Forbindelser (15 stk)
+# Sone-sentroider (NO1–NO5) — kun brukt for interne forbindelser
 # --------------------------------------------------------------------------
-# Hver tuple: (sone_a, sone_b, kind, navn)
-#   - sone_a/sone_b: ENTSO-E Area-koder (de bruker underscore, f.eks. NO_1)
-#   - kind: "internal" (NO-NO) eller "external" (NO ↔ utland)
-#   - navn: valgfritt kabelnavn for utenlandske forbindelser, ellers None
-#
-# For interne forbindelser (NO_x ↔ NO_y) er retning vilkårlig.
-# For eksterne er den norske siden alltid sone_a — det forenkler
-# import/eksport-logikken i frontend (positiv "fra norsk side" = eksport).
-CONNECTIONS = [
-    # Internt Norge
-    ("NO_1", "NO_2", "internal", None),
-    ("NO_1", "NO_3", "internal", None),
-    ("NO_1", "NO_5", "internal", None),
-    ("NO_2", "NO_5", "internal", None),
-    ("NO_3", "NO_4", "internal", None),
-    ("NO_3", "NO_5", "internal", None),
-
-    # Sverige
-    ("NO_1", "SE_3", "external", None),
-    ("NO_3", "SE_2", "external", None),
-    ("NO_4", "SE_1", "external", None),
-    ("NO_4", "SE_2", "external", None),
-
-    # Finland
-    ("NO_4", "FI",   "external", None),
-
-    # Sjøkabler til kontinentet og UK
-    ("NO_2", "DK_1", "external", "Skagerrak"),
-    ("NO_2", "DE_LU","external", "NordLink"),
-    ("NO_2", "GB",   "external", "North Sea Link"),
-    ("NO_2", "NL",   "external", "NorNed"),
-]
-
-
-# --------------------------------------------------------------------------
-# Endepunktskoordinater [lengdegrad, breddegrad] — GeoJSON-konvensjon
-# --------------------------------------------------------------------------
-# Norske soner: omtrentlige sentroider, valgt så pilene tegnes pent på
-# kartet. Kan finjusteres senere uten databasebytte — bare en konstant.
-# Utenlandske kabel-endepunkter: faktiske ilandføringssteder.
-# Utenlandske naboland (SE/FI/DK): omtrentlige sentroider av sonene.
-ENDPOINTS = {
-    # Norge — omtrentlige sone-sentroider
+# Koordinater i [lengdegrad, breddegrad] (GeoJSON-konvensjon). Disse er
+# fritt valgte sentralpunkter som gir pene linjer mellom sonene på et
+# oversiktskart. Eksterne forbindelser bruker IKKE disse — de har sine
+# egne fysiske endepunkter (se CONNECTIONS).
+ZONE_CENTROIDS = {
     "NO_1": [10.5, 60.5],   # Øst-Norge (Oslo-regionen)
     "NO_2": [7.5,  58.8],   # Sør-Norge (Agder/Rogaland)
     "NO_3": [10.5, 63.5],   # Midt-Norge (Trondheim-regionen)
     "NO_4": [18.0, 68.5],   # Nord-Norge (Tromsø-regionen)
     "NO_5": [6.5,  60.5],   # Vest-Norge (Bergen-regionen)
-
-    # Sverige — sone-sentroider
-    "SE_1": [19.0, 67.0],   # Nord-Sverige (Kiruna-regionen)
-    "SE_2": [17.0, 64.0],   # Mellom-nord Sverige (Sundsvall-regionen)
-    "SE_3": [16.0, 59.5],   # Sør-midt Sverige (Stockholm-regionen)
-
-    # Finland — landssentroid (FI er én sone)
-    "FI":   [26.0, 62.0],
-
-    # Danmark — DK1 (Jylland) sentroid
-    "DK_1": [9.5,  56.0],
-
-    # Sjøkabel-endepunkter: faktiske ilandføringssteder i utlandet
-    "DE_LU": [9.38,  53.93],  # Wilster, Tyskland (NordLink)
-    "GB":    [-1.51, 55.13],  # Blyth, England (North Sea Link)
-    "NL":    [6.84,  53.45],  # Eemshaven, Nederland (NorNed)
 }
+
+
+# --------------------------------------------------------------------------
+# Forbindelser med fysiske endepunkter
+# --------------------------------------------------------------------------
+# Hver forbindelse er en dict med:
+#   a, b      — ENTSO-E Area-koder (NO_1, SE_3 osv.)
+#   kind      — "internal" (NO-NO) eller "external" (NO ↔ utland)
+#   cable     — kabelnavn (kun eksterne), eller None
+#   a_point   — koordinat for endepunkt på A-siden (valgfritt for interne)
+#   b_point   — koordinat for endepunkt på B-siden (valgfritt for interne)
+#
+# Når a_point/b_point mangler, faller vi tilbake på ZONE_CENTROIDS.
+# Det gjør interne forbindelser kompakte i konfig, mens eksterne kan
+# peke til faktiske landtak/transformatorstasjoner.
+#
+# Eksterne forbindelser har den NORSKE SIDEN som "a", så samme konvensjon
+# gjelder overalt: når frontend bestemmer eksport/import-farge, sjekker
+# den om edge.from starter med "NO_".
+CONNECTIONS = [
+    # ----- Internt Norge — bruker sone-sentroider -----
+    {"a": "NO_1", "b": "NO_2", "kind": "internal", "cable": None},
+    {"a": "NO_1", "b": "NO_3", "kind": "internal", "cable": None},
+    {"a": "NO_1", "b": "NO_5", "kind": "internal", "cable": None},
+    {"a": "NO_2", "b": "NO_5", "kind": "internal", "cable": None},
+    {"a": "NO_3", "b": "NO_4", "kind": "internal", "cable": None},
+    {"a": "NO_3", "b": "NO_5", "kind": "internal", "cable": None},
+
+    # ----- AC mot Sverige — ender ved faktiske transformatorstasjoner -----
+    # NO_1 ↔ SE_3: Hasle-korridoren, Norges viktigste eksportkanal til Sverige
+    {"a": "NO_1", "b": "SE_3", "kind": "external", "cable": None,
+     "a_point": [11.39, 59.13],   # Hasle transformatorstasjon, Halden
+     "b_point": [13.04, 59.50]},  # Borgvik, Värmland
+
+    # NO_3 ↔ SE_2: Nea–Järpströmmen-linjen
+    {"a": "NO_3", "b": "SE_2", "kind": "external", "cable": None,
+     "a_point": [11.92, 63.05],   # Nea kraftverk, Tydal
+     "b_point": [13.50, 63.36]},  # Järpströmmen, Åre
+
+    # NO_4 ↔ SE_1: Ofoten–Ritsem
+    {"a": "NO_4", "b": "SE_1", "kind": "external", "cable": None,
+     "a_point": [17.32, 68.55],   # Ofoten transformatorstasjon, Bjerkvik
+     "b_point": [17.46, 67.71]},  # Ritsem
+
+    # NO_4 ↔ SE_2: Røssåga–Ajaure
+    {"a": "NO_4", "b": "SE_2", "kind": "external", "cable": None,
+     "a_point": [13.40, 65.99],   # Røssåga, sør for Mo i Rana
+     "b_point": [15.46, 65.97]},  # Ajaure
+
+    # ----- AC mot Finland -----
+    # NO_4 ↔ FI: Varangerbotn–Ivalo
+    {"a": "NO_4", "b": "FI", "kind": "external", "cable": None,
+     "a_point": [28.93, 70.18],   # Varangerbotn, Finnmark
+     "b_point": [27.55, 68.66]},  # Ivalo
+
+    # ----- HVDC-sjøkabler — ender ved faktiske omformerstasjoner -----
+    # Skagerrak 1–4: NO_2 ↔ DK_1
+    {"a": "NO_2", "b": "DK_1", "kind": "external", "cable": "Skagerrak",
+     "a_point": [8.05,  58.13],   # Kristiansand-området (Kvarenesfjorden)
+     "b_point": [9.59,  56.49]},  # Tjele, Jylland
+
+    # NordLink: NO_2 ↔ DE_LU
+    {"a": "NO_2", "b": "DE_LU", "kind": "external", "cable": "NordLink",
+     "a_point": [6.71,  58.66],   # Tonstad, Sirdal
+     "b_point": [9.38,  53.93]},  # Wilster, Schleswig-Holstein
+
+    # North Sea Link: NO_2 ↔ GB
+    {"a": "NO_2", "b": "GB", "kind": "external", "cable": "North Sea Link",
+     "a_point": [6.83,  59.49],   # Kvilldal, Suldal
+     "b_point": [-1.51, 55.13]},  # Blyth, Northumberland
+
+    # NorNed: NO_2 ↔ NL
+    {"a": "NO_2", "b": "NL", "kind": "external", "cable": "NorNed",
+     "a_point": [6.79,  58.31],   # Feda, Kvinesdal
+     "b_point": [6.83,  53.45]},  # Eemshaven, Groningen
+]
 
 
 # --------------------------------------------------------------------------
@@ -122,6 +147,18 @@ def get_client() -> EntsoePandasClient:
             raise RuntimeError("ENTSOE_API_TOKEN mangler i miljøet")
         _client = EntsoePandasClient(api_key=token)
     return _client
+
+
+def _endpoint(conn: dict, side: str) -> Optional[list]:
+    """
+    Returnerer koordinat for "a"- eller "b"-siden av en forbindelse.
+    Prøver først eksplisitt a_point/b_point, faller tilbake på sone-sentroid.
+    """
+    point_key = f"{side}_point"     # "a_point" eller "b_point"
+    if point_key in conn:
+        return conn[point_key]
+    zone = conn[side]
+    return ZONE_CENTROIDS.get(zone)
 
 
 # --------------------------------------------------------------------------
@@ -160,29 +197,23 @@ def _fetch_one_direction(
 # Aggregering: én forbindelse → én netto-edge
 # --------------------------------------------------------------------------
 def _net_flow(
-    sone_a: str, sone_b: str,
+    conn: dict,
     series_a_to_b: Optional[pd.Series],
     series_b_to_a: Optional[pd.Series],
 ) -> Optional[dict]:
     """
-    Regner netto flyt på grensen (sone_a, sone_b) ut fra de to enveis-seriene.
+    Regner netto flyt på grensen ut fra de to enveis-seriene.
 
     For at netto skal være meningsfullt må vi sammenligne SAMME time i
-    begge retninger. Ellers sammenligner vi epler og pærer (f.eks. eksport
-    kl 14:00 mot import kl 13:00). Vi finner siste tidsstempel som finnes
-    i BEGGE seriene.
+    begge retninger. Vi finner siste tidsstempel som finnes i BEGGE
+    seriene.
 
-    Returnerer en orientert edge:
-        - `from`/`to` peker i flytretningen (netto positiv)
-        - `mw` er absolutt verdi
-        - `timestamp` er den felles timen vi brukte
-    Eller None hvis det ikke finnes overlappende data.
+    Returnerer en orientert edge med korrekte from/to-koordinater i
+    flytretningen, eller None hvis det ikke finnes overlappende data.
     """
-    # Begge retninger må ha minst én datarad for at netto skal gi mening
     if series_a_to_b is None or series_b_to_a is None:
         return None
 
-    # Tidsstempler som finnes i begge → siste felles time
     common_index = series_a_to_b.index.intersection(series_b_to_a.index)
     if common_index.empty:
         return None
@@ -190,21 +221,33 @@ def _net_flow(
     latest = common_index.max()
     flow_a_to_b = float(series_a_to_b.loc[latest])
     flow_b_to_a = float(series_b_to_a.loc[latest])
-
-    # Netto: positiv betyr at A → B er den dominerende retningen
     net = flow_a_to_b - flow_b_to_a
 
-    # Orienter edge i flytretningen så `mw` alltid er positiv. Da slipper
-    # frontend å håndtere fortegn — den tegner bare pilen fra → to.
+    sone_a, sone_b = conn["a"], conn["b"]
+    point_a = _endpoint(conn, "a")
+    point_b = _endpoint(conn, "b")
+
+    # Orienter edge i flytretningen så `mw` alltid er positiv. Bytt også
+    # endepunktene så from_point matcher from-sonen og to_point matcher
+    # to-sonen. Da kan frontend bare lese koordinatene rett ut.
     if net >= 0:
-        from_zone, to_zone, mw = sone_a, sone_b, net
+        from_zone, to_zone = sone_a, sone_b
+        from_point, to_point = point_a, point_b
+        mw = net
     else:
-        from_zone, to_zone, mw = sone_b, sone_a, -net
+        from_zone, to_zone = sone_b, sone_a
+        from_point, to_point = point_b, point_a
+        mw = -net
 
     return {
+        "id": f"{sone_a}-{sone_b}",       # kanonisk uavhengig av retning
         "from": from_zone,
         "to": to_zone,
+        "from_point": from_point,
+        "to_point": to_point,
         "mw": round(mw, 1),
+        "kind": conn["kind"],
+        "cable": conn["cable"],
         "timestamp": latest.isoformat(),
     }
 
@@ -220,48 +263,43 @@ def fetch_current_flows() -> dict:
         {
             "edges": [
                 {
-                    "id": "NO_1-NO_2",          # uavhengig av retning
-                    "from": "NO_1",             # flytretning
-                    "to":   "NO_2",
-                    "mw": 234.5,                # absolutt netto MW
-                    "kind": "internal",         # eller "external"
-                    "cable": null,              # eller "NordLink" osv.
+                    "id": "NO_2-NL",
+                    "from": "NO_2",
+                    "to":   "NL",
+                    "from_point": [6.79, 58.31],
+                    "to_point":   [6.83, 53.45],
+                    "mw": 700.0,
+                    "kind": "external",
+                    "cable": "NorNed",
                     "timestamp": "2026-06-21T13:00:00+02:00",
                 },
                 ...
-            ],
-            "endpoints": {
-                "NO_1": [10.5, 60.5],
-                ...
-            }
+            ]
         }
+
+    Tidligere returnerte vi også en separat `endpoints`-dict, men nå
+    ligger koordinatene innebygd per edge — det er enklere for frontend
+    og lar oss ha ulike endepunkter for f.eks. NO_4→SE_1 vs NO_4→SE_2.
     """
-    # 1) Cache?
     cached = _cache.get("current")
     if cached is not None:
         ts, data = cached
         if time.time() - ts <= CACHE_TTL_SECONDS:
             return data
 
-    # 2) Forbered: klient + tidsvindu
-    get_client()  # init i hovedtråden, unngå race i workers
+    get_client()
 
     tz = "Europe/Oslo"
     now = pd.Timestamp.now(tz=tz)
-    # Vi henter siste 6 timer. ENTSO-E publiserer flyt med noen timers
-    # forsinkelse, og 6t-vinduet sikrer at vi har overlapp i begge retninger
-    # selv om en time er forsinket. Kostnaden er minimal — vi får uansett
-    # bare tilbake en kort serie per kall.
     start = now - pd.Timedelta(hours=6)
     end = now
 
-    # 3) Lag jobbliste: 30 kall (15 forbindelser × 2 retninger)
+    # 30 kall (15 forbindelser × 2 retninger)
     jobs = []
-    for sone_a, sone_b, _kind, _cable in CONNECTIONS:
-        jobs.append((sone_a, sone_b))  # A → B
-        jobs.append((sone_b, sone_a))  # B → A
+    for conn in CONNECTIONS:
+        jobs.append((conn["a"], conn["b"]))
+        jobs.append((conn["b"], conn["a"]))
 
-    # 4) Hent alt parallelt
     raw: dict[tuple, Optional[pd.Series]] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
         futures = [
@@ -272,34 +310,24 @@ def fetch_current_flows() -> dict:
             frm, to, series = future.result()
             raw[(frm, to)] = series
 
-    # 5) Aggreger til edges (én per forbindelse)
     edges = []
-    for sone_a, sone_b, kind, cable in CONNECTIONS:
+    for conn in CONNECTIONS:
         edge = _net_flow(
-            sone_a, sone_b,
-            raw.get((sone_a, sone_b)),
-            raw.get((sone_b, sone_a)),
+            conn,
+            raw.get((conn["a"], conn["b"])),
+            raw.get((conn["b"], conn["a"])),
         )
         if edge is None:
-            # Grensen droppes — ingen overlappende data
-            print(f"[flow_service] Ingen data for {sone_a}↔{sone_b}, hopper over")
+            print(f"[flow_service] Ingen data for {conn['a']}↔{conn['b']}, hopper over")
             continue
-        edge["id"] = f"{sone_a}-{sone_b}"  # kanonisk ID uavhengig av retning
-        edge["kind"] = kind
-        edge["cable"] = cable
+        # Begge endepunkter må være kjente koordinater
+        if edge["from_point"] is None or edge["to_point"] is None:
+            print(f"[flow_service] Mangler koordinat for {conn['a']}↔{conn['b']}, hopper over")
+            continue
         edges.append(edge)
 
-    # 6) Bygg endepunkt-kart kun for soner som faktisk er i bruk
-    used_zones = {z for e in edges for z in (e["from"], e["to"])}
-    endpoints = {z: ENDPOINTS[z] for z in used_zones if z in ENDPOINTS}
+    result = {"edges": edges}
 
-    result = {
-        "edges": edges,
-        "endpoints": endpoints,
-    }
-
-    # 7) Cache hvis vi fikk minst én edge. Ved fullstendig API-stopp lar
-    #    vi neste request prøve igjen i stedet for å cache en tom liste.
     if edges:
         _cache["current"] = (time.time(), result)
 
