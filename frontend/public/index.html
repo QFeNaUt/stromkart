@@ -232,6 +232,13 @@
       margin-top: 6px;
       letter-spacing: 0.2px;
     }
+    .popup-stale {
+      color: #f59e0b;        /* amber — matcher beta-pillen i tone */
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: 0.2px;
+    }
     .popup-sparkline {
       display: block;
       width: 100%;
@@ -442,6 +449,16 @@
       0.90,
     ];
 
+    // Når backend signaliserer is_stale=true (data fra cache fordi nytt
+    // ENTSO-E-forsøk feilet eller ga vesentlig færre edges), demper vi
+    // opasiteten ytterligere så brukeren ser visuelt at data ikke er fersk.
+    // Tooltip-en sier i tillegg "⚠ Bufret data" eksplisitt ved hover.
+    const FLOW_OPACITY_STALE = [
+      'case',
+      ['==', ['get', 'direction'], 'internal'], 0.35,
+      0.50,
+    ];
+
     /**
      * Lager et pilhode-ikon på canvas og returnerer det som ImageData.
      * Vi gjorde tidligere et forsøk med Unicode-tegn (▶ og →) i et symbol-
@@ -576,6 +593,7 @@
     let initialFitDone = false;
     let spotPriceVisible = true;
     let flowsVisible = true;
+    let flowsIsStale = false;   // settes av renderFlows() basert på backend-respons
 
     const zonePopup = new maplibregl.Popup({
       closeButton: false, closeOnClick: false, offset: 8,
@@ -741,6 +759,11 @@
     // (`flowsData`), og lag/kilde opprettes/oppdateres via en idempotent
     // `addFlowLayers()` som kan kalles flere ganger uten å duplisere noe.
     function renderFlows(payload) {
+      // is_stale=true betyr at backend serverer cache fordi nyere henting
+      // feilet eller ga vesentlig færre edges. Dataene er fortsatt
+      // meningsfulle (siste kjente flyt fra forrige time), men vi viser
+      // dem dempet og merker tooltip-en eksplisitt.
+      flowsIsStale = payload?.is_stale === true;
       flowsData = buildFlowGeoJSON(payload);
       if (mapLoaded) addFlowLayers();
     }
@@ -812,6 +835,13 @@
           },
         }, beforeId);
       }
+
+      // Opacity oppdateres på hvert render-kall — ikke kun ved opprettelse.
+      // Sikrer at overgangen fresh ↔ stale faktisk slår gjennom visuelt på
+      // neste data-refresh uten å måtte rive lagene ned og bygge dem opp.
+      const lineOpacity = flowsIsStale ? FLOW_OPACITY_STALE : FLOW_OPACITY;
+      map.setPaintProperty('flows-line',  'line-opacity', lineOpacity);
+      map.setPaintProperty('flows-arrow', 'icon-opacity', lineOpacity);
     }
 
     function handleFlowHover(e) {
@@ -824,6 +854,9 @@
         import:   'Import',
         internal: 'Internflyt',
       }[p.direction] || 'Flyt';
+      const staleLine = flowsIsStale
+        ? '<div class="popup-stale">⚠ Bufret data</div>'
+        : '';
       const cableLine = p.cable ? `<div class="popup-region">${p.cable}</div>` : '';
       const timeStr = p.timestamp
         ? new Date(p.timestamp).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' })
@@ -834,6 +867,7 @@
         .setHTML(`
           <div class="popup-accent" style="background:${color}"></div>
           <div class="popup-body">
+            ${staleLine}
             ${cableLine}
             <div class="popup-zone">${p.from} → ${p.to}</div>
             <div class="popup-price" style="color:${color}">
