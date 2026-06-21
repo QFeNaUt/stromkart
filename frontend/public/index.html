@@ -308,6 +308,10 @@
       <input type="checkbox" id="toggle-flyt" checked>
       <span>Kraftflyt</span>
     </label>
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggle-magasin" checked>
+      <span>Magasinfylling</span>
+    </label>
   </div>
 
   <script>
@@ -352,6 +356,16 @@
           map.addImage(`flag-${code}`, createFlagIcon(code));
         }
       });
+      // Pre-registrer batteri-ikoner i 5 %-trinn (battery-0, battery-5,
+      // ... battery-100 = 21 ikoner). Magasinfylling-laget velger riktig
+      // ikon per feature basert på fyllingsgrad rundet til nærmeste 5.
+      // Vi pre-registrerer alle for å unngå addImage-kall per data-refresh.
+      for (let pct = 0; pct <= 100; pct += 5) {
+        const key = `battery-${pct}`;
+        if (!map.hasImage(key)) {
+          map.addImage(key, createBatteryIcon(pct));
+        }
+      }
       if (zonesData) addOverlays();
     });
 
@@ -593,6 +607,75 @@
     }
 
     /**
+     * Tegner et batteri-ikon (24×32 px) der fyllhøyden viser
+     * magasinfyllingsgraden i prosent. Returneres som ImageData.
+     *
+     * Design (etter eksplisitt designvalg):
+     *   - Ensfarget blå fylling (vannfarget), ikke fargekodet etter nivå.
+     *     Begrunnelse: magasinfylling er sterkt sesongavhengig — 40 % er
+     *     kritisk i november, normalt i mai. Faste rød/gul/grønn-terskler
+     *     ville være faglig misvisende. Høyden alene formidler tilstanden.
+     *   - Mørk ramme (svart halo) for kontrast mot dark basemap.
+     *   - Liten "nubbin" på toppen for batterimetaforens skyld.
+     *   - Tomme deler tegnes mørkegrå, ikke transparent, så batteriet
+     *     leses som ett objekt uansett hva som er bak.
+     *
+     * Inn:  fillPercent (0-100). Verdier utenfor clampes.
+     * Ut:   ImageData 24×32.
+     */
+    function createBatteryIcon(fillPercent) {
+      const W = 24, H = 32;
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+
+      // Clamp og normaliser
+      const pct = Math.max(0, Math.min(100, Number(fillPercent) || 0));
+
+      // Geometri: nubbin øverst (4×3 px), selve batterikroppen under (20×27)
+      const NUB_W = 6, NUB_H = 3;
+      const BODY_X = 2, BODY_Y = NUB_H, BODY_W = 20, BODY_H = 27;
+      const FILL_PAD = 2;   // ramme innenfor batterikroppen
+      const FILL_X = BODY_X + FILL_PAD;
+      const FILL_W = BODY_W - 2 * FILL_PAD;
+      const FILL_AREA_Y = BODY_Y + FILL_PAD;
+      const FILL_AREA_H = BODY_H - 2 * FILL_PAD;
+
+      // 1) Nubbin på toppen (mørk halo + lys overdel)
+      ctx.fillStyle = '#0d1117';
+      ctx.fillRect((W - NUB_W) / 2 - 1, 0, NUB_W + 2, NUB_H + 1);
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect((W - NUB_W) / 2, 0, NUB_W, NUB_H);
+
+      // 2) Batterikroppens halo (1px svart ramme rundt selve kroppen)
+      ctx.fillStyle = '#0d1117';
+      ctx.fillRect(BODY_X - 1, BODY_Y, BODY_W + 2, BODY_H + 1);
+
+      // 3) Indre lys ramme
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(BODY_X, BODY_Y, BODY_W, BODY_H);
+
+      // 4) Tom bakgrunn inni rammen (mørkegrå — leses som "tomt")
+      ctx.fillStyle = '#1f2937';
+      ctx.fillRect(FILL_X, FILL_AREA_Y, FILL_W, FILL_AREA_H);
+
+      // 5) Fyll fra bunnen, høyde proporsjonal med prosent
+      const fillH = Math.round(FILL_AREA_H * pct / 100);
+      if (fillH > 0) {
+        ctx.fillStyle = '#3b82f6';  // ensfarget vannblå
+        ctx.fillRect(
+          FILL_X,
+          FILL_AREA_Y + FILL_AREA_H - fillH,
+          FILL_W,
+          fillH,
+        );
+      }
+
+      return ctx.getImageData(0, 0, W, H);
+    }
+
+    /**
      * Bygger en GeoJSON FeatureCollection av kraftflyt-edges fra backend.
      * Hver edge har sine egne from_point/to_point — backend velger fysisk
      * realistiske endepunkter (omformerstasjoner, transformatorstasjoner),
@@ -729,11 +812,24 @@
     let zonesData = null;
     let flowsData = null;
     let flowsFlagsData = null;  // separat GeoJSON for utenlandsk-flagg på flyt-laget
+    let reservoirsData = null;  // {NO_1: {fill_percent, ...}, ...}
+
+    // Sone-sentroider for plassering av batteri-ikoner og andre per-sone-markører.
+    // Hardkodet her i frontend — samme som ZONE_CENTROIDS i backend flow_service.
+    // Disse er fritt valgte midtpunkter, ikke geometrisk eksakte sentroider.
+    const ZONE_CENTROIDS = {
+      'NO_1': [10.5, 60.5],
+      'NO_2': [7.5,  58.8],
+      'NO_3': [10.5, 63.5],
+      'NO_4': [18.0, 68.5],
+      'NO_5': [6.5,  60.5],
+    };
     let overlayHandlersAttached = false;
     let initialFitDone = false;
     let spotPriceVisible = true;
     let flowsVisible = true;
     let flowsIsStale = false;   // settes av renderFlows() basert på backend-respons
+    let reservoirsVisible = true;
 
     const zonePopup = new maplibregl.Popup({
       closeButton: false, closeOnClick: false, offset: 8,
@@ -748,24 +844,27 @@
         errorDiv.textContent = ''; // Tøm evt gammel feilmelding
         
         // Bruk den nye retry-funksjonen for å hente data
-        const [zonesRes, pricesRes, todayRes, flowsRes] = await Promise.all([
+        const [zonesRes, pricesRes, todayRes, flowsRes, reservoirsRes] = await Promise.all([
           fetchWithRetry(`${API_BASE}/api/zones/`),
           fetchWithRetry(`${API_BASE}/api/prices/current`),
           fetchWithRetry(`${API_BASE}/api/prices/today`),
           fetchWithRetry(`${API_BASE}/api/flows/current`),
+          fetchWithRetry(`${API_BASE}/api/reservoirs/current`),
         ]);
 
         if (!zonesRes.ok)  throw new Error(`/api/zones returned ${zonesRes.status}`);
         if (!pricesRes.ok) throw new Error(`/api/prices/current returned ${pricesRes.status}`);
         if (!todayRes.ok)  console.warn(`/api/prices/today returned ${todayRes.status}`);
-        // Flyt er en "nice to have" — hele kartet skal fungere selv om
-        // ENTSO-E svikter for én eller flere grenser. Vi logger og går videre.
-        if (!flowsRes.ok)  console.warn(`/api/flows/current returned ${flowsRes.status}`);
+        // Flyt og magasin er "nice to have" — hele kartet skal fungere selv om
+        // ENTSO-E/NVE svikter. Vi logger og går videre.
+        if (!flowsRes.ok)       console.warn(`/api/flows/current returned ${flowsRes.status}`);
+        if (!reservoirsRes.ok)  console.warn(`/api/reservoirs/current returned ${reservoirsRes.status}`);
 
         const zones  = await zonesRes.json();
         const prices = await pricesRes.json();
         todayPrices  = todayRes.ok ? await todayRes.json() : {};
-        const flows  = flowsRes.ok ? await flowsRes.json() : null;
+        const flows       = flowsRes.ok       ? await flowsRes.json()       : null;
+        const reservoirs  = reservoirsRes.ok  ? await reservoirsRes.json()  : null;
 
         // Slå sammen pris inn i hver feature
         for (const f of zones.features) {
@@ -779,8 +878,9 @@
         }
 
         renderMap(zones);
-        renderTable(zones, prices);
+        renderTable(zones, prices, reservoirs);
         renderFlows(flows);
+        renderReservoirs(reservoirs);
 
       } catch (err) {
         document.getElementById('error').textContent = 'Venter på nettverk... Klarte ikke å hente ferske data.';
@@ -880,6 +980,9 @@
       // fra loadData, og en evt. race vinnes av addOverlays når kartet
       // ferdiglastes etter at data har kommet inn).
       if (flowsData) addFlowLayers();
+
+      // Magasinfylling: samme idempotente mønster.
+      if (reservoirsData) addReservoirLayer();
 
       updateOverlayVisibility();
 
@@ -1060,6 +1163,74 @@
       flowPopup.remove();
     }
 
+    // -------------------------------------------------------------
+    // Magasinfylling-rendering
+    // -------------------------------------------------------------
+    // Strategien følger samme mønster som flyt: state lagres globalt
+    // (reservoirsData), og lag/kilde opprettes/oppdateres via en
+    // idempotent addReservoirLayer() som kan kalles flere ganger.
+    //
+    // Datadrevet ikonvalg: hver feature får ikon-navnet 'battery-XX'
+    // der XX er prosent rundet til nærmeste 5 (battery-0, battery-5,
+    // ... battery-100 = 21 ikoner totalt). Vi pre-registrerer alle
+    // disse ved oppstart for å unngå et nytt addImage-kall per refresh.
+    function renderReservoirs(payload) {
+      reservoirsData = payload?.areas || null;
+      if (mapLoaded) addReservoirLayer();
+    }
+
+    function buildReservoirGeoJSON() {
+      if (!reservoirsData) {
+        return { type: 'FeatureCollection', features: [] };
+      }
+      const features = [];
+      for (const [zoneCode, info] of Object.entries(reservoirsData)) {
+        const coords = ZONE_CENTROIDS[zoneCode];
+        if (!coords || info.fill_percent == null) continue;
+        // Avrund til nærmeste 5 % for å treffe et pre-registrert ikon
+        const bucket = Math.round(info.fill_percent / 5) * 5;
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: coords },
+          properties: {
+            zone: zoneCode,
+            fill_percent: info.fill_percent,
+            bucket,
+            icon: `battery-${bucket}`,
+          },
+        });
+      }
+      return { type: 'FeatureCollection', features };
+    }
+
+    function addReservoirLayer() {
+      const geojson = buildReservoirGeoJSON();
+
+      const src = map.getSource('reservoirs');
+      if (src) {
+        src.setData(geojson);
+      } else {
+        map.addSource('reservoirs', { type: 'geojson', data: geojson });
+      }
+
+      // Plasser laget under bynavn så ikonene ikke overlapper Oslo/Bergen-etiketter
+      const beforeId = map.getLayer('cities-dot') ? 'cities-dot' : undefined;
+
+      if (!map.getLayer('reservoirs-layer')) {
+        map.addLayer({
+          id: 'reservoirs-layer',
+          type: 'symbol',
+          source: 'reservoirs',
+          layout: {
+            'icon-image': ['get', 'icon'],
+            'icon-size': 1,
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+          },
+        }, beforeId);
+      }
+    }
+
     function updateOverlayVisibility() {
       const zonesV = spotPriceVisible ? 'visible' : 'none';
       if (map.getLayer('zones-fill')) map.setLayoutProperty('zones-fill', 'visibility', zonesV);
@@ -1069,6 +1240,9 @@
       if (map.getLayer('flows-line'))         map.setLayoutProperty('flows-line',         'visibility', flowsV);
       if (map.getLayer('flows-arrow'))        map.setLayoutProperty('flows-arrow',        'visibility', flowsV);
       if (map.getLayer('flows-flags-layer'))  map.setLayoutProperty('flows-flags-layer',  'visibility', flowsV);
+
+      const reservoirsV = reservoirsVisible ? 'visible' : 'none';
+      if (map.getLayer('reservoirs-layer'))   map.setLayoutProperty('reservoirs-layer',   'visibility', reservoirsV);
     }
 
     function setFlowsVisible(visible) {
@@ -1081,6 +1255,11 @@
       spotPriceVisible = visible;
       updateOverlayVisibility();
       if (!visible) zonePopup.remove();
+    }
+
+    function setReservoirsVisible(visible) {
+      reservoirsVisible = visible;
+      updateOverlayVisibility();
     }
 
     function handleZoneHover(e) {
@@ -1170,16 +1349,23 @@
       `;
     }
 
-    function renderTable(zones, prices) {
+    function renderTable(zones, prices, reservoirs) {
       const tbody = document.querySelector('#prices tbody');
       tbody.innerHTML = '';
       const zoneOrder = ['NO1', 'NO2', 'NO3', 'NO4', 'NO5'];
+      const reservoirAreas = reservoirs?.areas || {};
       for (const z of zoneOrder) {
         const p = prices[z];
         const priceOre = p && p.price_ore_kwh != null ? p.price_ore_kwh : null;
         const priceEur = p && p.price_eur_mwh != null ? p.price_eur_mwh : null;
         const zoneCol  = ZONE_COLORS[z] || '#6b7280';
         const priceCol = priceColor(priceOre);
+        // Magasinfylling: backend bruker NO_1-format, tabellen bruker NO1
+        const resInfo = reservoirAreas[`NO_${z.slice(2)}`];
+        const fillPct = resInfo?.fill_percent;
+        const reservoirCell = fillPct != null
+          ? `<div class="subprice">Magasin: ${fillPct.toFixed(1)} %</div>`
+          : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="zone">
@@ -1190,6 +1376,7 @@
             ${priceOre != null ? priceOre.toFixed(1) : '—'}
             <span class="unit">øre/kWh</span>
             ${priceEur != null ? `<div class="subprice">${priceEur.toFixed(2)} EUR/MWh</div>` : ''}
+            ${reservoirCell}
           </td>
         `;
         tbody.appendChild(tr);
@@ -1201,6 +1388,9 @@
     });
     document.getElementById('toggle-flyt').addEventListener('change', (e) => {
       setFlowsVisible(e.target.checked);
+    });
+    document.getElementById('toggle-magasin').addEventListener('change', (e) => {
+      setReservoirsVisible(e.target.checked);
     });
 
     loadData();
