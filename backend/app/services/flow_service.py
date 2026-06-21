@@ -72,18 +72,33 @@ CONNECTIONS = [
      "a_point": [28.5444, 70.1703], "b_point": [27.5653, 68.6467]},
 
     # ----- HVDC-sjøkabler — ender ved faktiske omformerstasjoner -----
+    # Mellompunkter (`sea_points`) gir hver kabel en geografisk plausibel
+    # trasé i stedet for én rett linje fra omformerstasjon til omformer-
+    # stasjon. For Skagerrak, NordLink og NSL bruker vi ett mellompunkt
+    # for å bøye kabelen pent rundt landmasser. NorNed har flere punkter
+    # som følger den faktiske traséen via Norskerenna og sørover gjennom
+    # Nordsjøen, ned til Wadden-havet og Eemshaven.
     {"a": "NO_2", "b": "DK_1", "kind": "external", "cable": "Skagerrak",
-     "a_point":   [8.05,  58.13],   "b_point":   [9.59,  56.49],
-     "sea_point": [8.70,  57.50]},
+     "a_point":    [8.05, 58.13],   "b_point": [9.59, 56.49],
+     "sea_points": [[8.70, 57.50]]},
     {"a": "NO_2", "b": "DE_LU", "kind": "external", "cable": "NordLink",
-     "a_point":   [6.71,  58.66],   "b_point":   [9.38,  53.93],
-     "sea_point": [6.50,  56.50]},
+     "a_point":    [6.71, 58.66],   "b_point": [9.38, 53.93],
+     "sea_points": [[6.50, 56.50]]},
     {"a": "NO_2", "b": "GB", "kind": "external", "cable": "North Sea Link",
-     "a_point":   [6.83,  59.49],   "b_point":   [-1.51, 55.13],
-     "sea_point": [2.00,  57.00]},
+     "a_point":    [6.83, 59.49],   "b_point": [-1.51, 55.13],
+     "sea_points": [[2.00, 57.00]]},
     {"a": "NO_2", "b": "NL", "kind": "external", "cable": "NorNed",
-     "a_point":   [6.79,  58.31],   "b_point":   [6.83,  53.45],
-     "sea_point": [5.00,  56.00]},
+     "a_point":    [6.79, 58.31],   "b_point": [6.83, 53.45],
+     # Trasé approksimert etter 4C Offshore Interactive Map: nesten rett
+     # sørover fra Feda med en svak vestlig drift gjennom Nordsjøen, før
+     # innsving østover mot Eemshaven.
+     "sea_points": [
+         [6.50, 57.50],  # Ut fra Feda, svak vestlig sving
+         [6.00, 56.00],  # Nordlig Nordsjøen
+         [5.50, 55.00],  # Midt-Nordsjøen
+         [5.50, 54.00],  # Sørlig Nordsjøen
+         [6.00, 53.65],  # Innsving mot Eemshaven
+     ]},
 ]
 
 
@@ -206,7 +221,7 @@ def _net_flow(
     point_a = _endpoint(conn, "a")
     point_b = _endpoint(conn, "b")
 
-    via_a_to_b = [conn["sea_point"]] if conn.get("sea_point") else []
+    via_a_to_b = list(conn.get("sea_points", []))
 
     if net >= 0:
         from_zone, to_zone = sone_a, sone_b
