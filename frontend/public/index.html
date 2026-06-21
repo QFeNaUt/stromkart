@@ -744,29 +744,31 @@
           source: 'flows',
           layout: {
             'symbol-placement':   'line-center',
-            'text-field':         '▶',
+            // Vi bruker → (U+2192 RIGHTWARDS ARROW) i stedet for ▶ fordi
+            // sistnevnte ligger i Unicode-blokken "Geometric Shapes" som
+            // CARTO sin Open Sans-glyph-server ofte mangler. MapLibre tegner
+            // ingenting når glyfen mangler — ingen feilmelding, bare usynlig
+            // resultat. Pilen → er i "Arrows"-blokken og er garantert med.
+            'text-field':         '→',
             'text-font':          ['Open Sans Regular'],
             'text-size': [
               'interpolate', ['linear'], ['coalesce', ['get', 'mw'], 0],
-              0,    10,
-              400,  14,
-              1400, 18,
+              0,    14,
+              400,  18,
+              1400, 24,
             ],
-            'text-keep-upright':  false,  // la pilen rotere fritt med linja
+            'text-keep-upright':  false,
             'text-rotation-alignment': 'map',
             'text-allow-overlap': true,
             'text-ignore-placement': true,
           },
           paint: {
-            'text-color': [
-              'match', ['get', 'direction'],
-              'export',   FLOW_COLORS.export,
-              'import',   FLOW_COLORS.import,
-              'internal', FLOW_COLORS.internal,
-              FLOW_COLORS.internal,
-            ],
+            // Hvit pil med mørk halo gir maks lesbarhet over alle linjefarger.
+            // Linjefargen under formidler retning-betydningen (eksport/import/
+            // intern), så pilen selv trenger bare å vise selve retningen.
+            'text-color': '#ffffff',
             'text-halo-color': '#0d1117',
-            'text-halo-width': 1.5,
+            'text-halo-width': 2.0,
             'text-opacity': FLOW_OPACITY,
           },
         }, beforeId);
