@@ -18,15 +18,11 @@ Mens spotpriser har 5 sone-kall, har vi her 15 grenser × 2 retninger =
   - Isolert feilhåndtering per kall: hvis Skagerrak mangler data for én
     time, skal hele endepunktet IKKE krasje — den ene grensen blir bare
     droppet i svaret.
-  - Aggressiv cache (1t TTL): flyt-data er hourly og oppdateres relativt
-    sjelden. Vi bryr oss om "sist publiserte time", ikke realtid.
-
-Endepunktene er fysisk realistiske: HVDC-kabler ender ved faktiske
-omformerstasjoner/landtak (Feda, Eemshaven, Tonstad, Wilster osv.),
-AC-forbindelser ender ved de norske og svenske/finske transformator-
-stasjonene som faktisk er knyttet sammen. Dette gir et kart som speiler
-hvor kraftutvekslingen geografisk skjer, ikke bare hvilke soner som
-utveksler.
+  - 429-aware retry: ENTSO-E har en udokumentert rate-grense. Ved 429
+    sover vi 5 sek og prøver én gang til før vi gir opp grensen.
+  - To-lags cache: 1t fersk (returneres direkte) + 24t stale fallback
+    (returneres hvis nytt forsøk feiler eller blir tydelig dårligere
+    enn forrige).
 """
 import concurrent.futures
 import os
@@ -34,15 +30,12 @@ import time
 from typing import Optional
 
 import pandas as pd
+import requests
 from entsoe import EntsoePandasClient
 
 # --------------------------------------------------------------------------
 # Sone-sentroider (NO1–NO5) — kun brukt for interne forbindelser
 # --------------------------------------------------------------------------
-# Koordinater i [lengdegrad, breddegrad] (GeoJSON-konvensjon). Disse er
-# fritt valgte sentralpunkter som gir pene linjer mellom sonene på et
-# oversiktskart. Eksterne forbindelser bruker IKKE disse — de har sine
-# egne fysiske endepunkter (se CONNECTIONS).
 ZONE_CENTROIDS = {
     "NO_1": [10.5, 60.5],   # Øst-Norge (Oslo-regionen)
     "NO_2": [7.5,  58.8],   # Sør-Norge (Agder/Rogaland)
@@ -55,20 +48,6 @@ ZONE_CENTROIDS = {
 # --------------------------------------------------------------------------
 # Forbindelser med fysiske endepunkter
 # --------------------------------------------------------------------------
-# Hver forbindelse er en dict med:
-#   a, b      — ENTSO-E Area-koder (NO_1, SE_3 osv.)
-#   kind      — "internal" (NO-NO) eller "external" (NO ↔ utland)
-#   cable     — kabelnavn (kun eksterne), eller None
-#   a_point   — koordinat for endepunkt på A-siden (valgfritt for interne)
-#   b_point   — koordinat for endepunkt på B-siden (valgfritt for interne)
-#
-# Når a_point/b_point mangler, faller vi tilbake på ZONE_CENTROIDS.
-# Det gjør interne forbindelser kompakte i konfig, mens eksterne kan
-# peke til faktiske landtak/transformatorstasjoner.
-#
-# Eksterne forbindelser har den NORSKE SIDEN som "a", så samme konvensjon
-# gjelder overalt: når frontend bestemmer eksport/import-farge, sjekker
-# den om edge.from starter med "NO_".
 CONNECTIONS = [
     # ----- Internt Norge — bruker sone-sentroider -----
     {"a": "NO_1", "b": "NO_2", "kind": "internal", "cable": None},
@@ -79,66 +58,41 @@ CONNECTIONS = [
     {"a": "NO_3", "b": "NO_5", "kind": "internal", "cable": None},
 
     # ----- AC mot Sverige — ender ved faktiske transformatorstasjoner -----
-    # NO_1 ↔ SE_3: Hasle-korridoren, Norges viktigste eksportkanal til Sverige
     {"a": "NO_1", "b": "SE_3", "kind": "external", "cable": None,
-     "a_point": [11.39, 59.13],   # Hasle transformatorstasjon, Halden
-     "b_point": [13.04, 59.50]},  # Borgvik, Värmland
-
-    # NO_3 ↔ SE_2: Nea–Järpströmmen-linjen
+     "a_point": [11.39, 59.13],   "b_point": [13.04, 59.50]},
     {"a": "NO_3", "b": "SE_2", "kind": "external", "cable": None,
-     "a_point": [11.92, 63.05],   # Nea kraftverk, Tydal
-     "b_point": [13.50, 63.36]},  # Järpströmmen, Åre
-
-    # NO_4 ↔ SE_1: Ofoten–Ritsem
+     "a_point": [11.92, 63.05],   "b_point": [13.50, 63.36]},
     {"a": "NO_4", "b": "SE_1", "kind": "external", "cable": None,
-     "a_point": [17.32, 68.55],   # Ofoten transformatorstasjon, Bjerkvik
-     "b_point": [17.46, 67.71]},  # Ritsem
-
-    # NO_4 ↔ SE_2: Røssåga–Ajaure
+     "a_point": [17.32, 68.55],   "b_point": [17.46, 67.71]},
     {"a": "NO_4", "b": "SE_2", "kind": "external", "cable": None,
-     "a_point": [13.40, 65.99],   # Røssåga, sør for Mo i Rana
-     "b_point": [15.46, 65.97]},  # Ajaure
+     "a_point": [13.40, 65.99],   "b_point": [15.46, 65.97]},
 
     # ----- AC mot Finland -----
-    # NO_4 ↔ FI: Varangerbotn–Ivalo, eneste direkte AC-sammenkobling
-    # mellom Norge og Finland (220 kV-linje). Eier Statnett på norsk
-    # side, Fingrid på finsk.
     {"a": "NO_4", "b": "FI", "kind": "external", "cable": None,
-     "a_point": [28.5444, 70.1703],   # Varangerbotn transformatorstasjon, Nesseby
-     "b_point": [27.5653, 68.6467]},  # Ivalo sähköasema, Inari/Enare
+     "a_point": [28.5444, 70.1703], "b_point": [27.5653, 68.6467]},
 
     # ----- HVDC-sjøkabler — ender ved faktiske omformerstasjoner -----
-    # Skagerrak 1–4: NO_2 ↔ DK_1
     {"a": "NO_2", "b": "DK_1", "kind": "external", "cable": "Skagerrak",
-     "a_point":   [8.05,  58.13],   # Kristiansand-området (Kvarenesfjorden)
-     "b_point":   [9.59,  56.49],   # Tjele, Jylland
-     "sea_point": [8.70,  57.50]},  # Skagerrak, nord-vest for Jylland
-
-    # NordLink: NO_2 ↔ DE_LU
+     "a_point":   [8.05,  58.13],   "b_point":   [9.59,  56.49],
+     "sea_point": [8.70,  57.50]},
     {"a": "NO_2", "b": "DE_LU", "kind": "external", "cable": "NordLink",
-     "a_point":   [6.71,  58.66],   # Tonstad, Sirdal
-     "b_point":   [9.38,  53.93],   # Wilster, Schleswig-Holstein
-     "sea_point": [6.50,  56.50]},  # Nordsjøen, vest for Jylland
-
-    # North Sea Link: NO_2 ↔ GB
+     "a_point":   [6.71,  58.66],   "b_point":   [9.38,  53.93],
+     "sea_point": [6.50,  56.50]},
     {"a": "NO_2", "b": "GB", "kind": "external", "cable": "North Sea Link",
-     "a_point":   [6.83,  59.49],   # Kvilldal, Suldal
-     "b_point":   [-1.51, 55.13],   # Blyth, Northumberland
-     "sea_point": [2.00,  57.00]},  # Midt i Nordsjøen
-
-    # NorNed: NO_2 ↔ NL
+     "a_point":   [6.83,  59.49],   "b_point":   [-1.51, 55.13],
+     "sea_point": [2.00,  57.00]},
     {"a": "NO_2", "b": "NL", "kind": "external", "cable": "NorNed",
-     "a_point":   [6.79,  58.31],   # Feda, Kvinesdal
-     "b_point":   [6.83,  53.45],   # Eemshaven, Groningen
-     "sea_point": [5.00,  56.00]},  # Nordsjøen, vest for Danmark
+     "a_point":   [6.79,  58.31],   "b_point":   [6.83,  53.45],
+     "sea_point": [5.00,  56.00]},
 ]
 
 
 # --------------------------------------------------------------------------
 # Cache og klient
 # --------------------------------------------------------------------------
-CACHE_TTL_SECONDS = 3600  # 1 time — flyt-data oppdateres hourly
-REQUEST_TIMEOUT = 20      # sekunder per ENTSO-E-kall
+CACHE_TTL_FRESH_SECONDS = 3600   # 1 time — returneres direkte
+CACHE_TTL_STALE_SECONDS = 86400  # 24 timer — fallback hvis ENTSO-E feiler
+REQUEST_TIMEOUT = 20             # sekunder per kall
 
 _cache: dict = {}
 _client: Optional[EntsoePandasClient] = None
@@ -160,7 +114,7 @@ def _endpoint(conn: dict, side: str) -> Optional[list]:
     Returnerer koordinat for "a"- eller "b"-siden av en forbindelse.
     Prøver først eksplisitt a_point/b_point, faller tilbake på sone-sentroid.
     """
-    point_key = f"{side}_point"     # "a_point" eller "b_point"
+    point_key = f"{side}_point"
     if point_key in conn:
         return conn[point_key]
     zone = conn[side]
@@ -168,7 +122,7 @@ def _endpoint(conn: dict, side: str) -> Optional[list]:
 
 
 # --------------------------------------------------------------------------
-# Worker: ett retningskall
+# Worker: ett retningskall, med 429-aware retry
 # --------------------------------------------------------------------------
 def _fetch_one_direction(
     from_code: str, to_code: str, start: pd.Timestamp, end: pd.Timestamp
@@ -176,27 +130,46 @@ def _fetch_one_direction(
     """
     Henter flyt-serien for én retning (from_code → to_code).
 
-    Returnerer (from_code, to_code, series_eller_None). Fanger ALLE
-    exceptions lokalt og returnerer None for serien hvis noe feiler —
-    det er hele poenget med å isolere per grense. En død grense skal
-    aldri trekke ned hele endepunktet.
+    ENTSO-E har en udokumentert rate-grense (~400 req/min per token). Når
+    vi traff den under utvikling med hyppige cache-tømninger, droppet vi
+    12 av 15 grenser. Løsning: hvis et kall feiler med HTTP 429, sov 5
+    sek og prøv én gang til. Alle andre exceptions oppfører seg som før
+    (logges, returnerer None, grensen droppes i denne runden).
+
+    Returnerer (from_code, to_code, series_eller_None).
     """
-    try:
-        client = get_client()
-        series = client.query_crossborder_flows(
-            from_code, to_code, start=start, end=end
-        )
-        if series is None or series.empty:
+    client = get_client()
+
+    for attempt in range(2):
+        try:
+            series = client.query_crossborder_flows(
+                from_code, to_code, start=start, end=end
+            )
+            if series is None or series.empty:
+                return from_code, to_code, None
+            # Dropper NaN-rader så aggregeringen kan se kun timer som faktisk
+            # har data. ENTSO-E returnerer ofte hull i datasettet.
+            series = series.dropna()
+            if series.empty:
+                return from_code, to_code, None
+            return from_code, to_code, series
+
+        except requests.exceptions.HTTPError as e:
+            # 429 = rate limit. Gi det 5 sek og prøv ett retry.
+            status = e.response.status_code if e.response is not None else None
+            if status == 429 and attempt == 0:
+                print(f"[flow_service] 429 rate limit for {from_code}→{to_code}, venter 5s og prøver igjen")
+                time.sleep(5)
+                continue
+            print(f"[flow_service] {from_code} → {to_code} feilet (HTTP {status}): {e}")
             return from_code, to_code, None
-        # Dropper NaN-rader så aggregeringen kan se kun timer som faktisk
-        # har data. ENTSO-E returnerer ofte hull i datasettet.
-        series = series.dropna()
-        if series.empty:
+
+        except Exception as e:
+            print(f"[flow_service] {from_code} → {to_code} feilet: {e}")
             return from_code, to_code, None
-        return from_code, to_code, series
-    except Exception as e:
-        print(f"[flow_service] {from_code} → {to_code} feilet: {e}")
-        return from_code, to_code, None
+
+    # Falt gjennom alle attempts (f.eks. 429 på begge forsøk)
+    return from_code, to_code, None
 
 
 # --------------------------------------------------------------------------
@@ -233,16 +206,8 @@ def _net_flow(
     point_a = _endpoint(conn, "a")
     point_b = _endpoint(conn, "b")
 
-    # Valgfrie mellompunkter (kun definert for HVDC-sjøkabler). Lagres
-    # som liste — gjør det trivielt å utvide til flere "knekkpunkter"
-    # senere uten å endre datastrukturen. Tomt for AC og interne forb.
     via_a_to_b = [conn["sea_point"]] if conn.get("sea_point") else []
 
-    # Orienter edge i flytretningen så `mw` alltid er positiv. Bytt også
-    # endepunktene så from_point matcher from-sonen og to_point matcher
-    # to-sonen. Da kan frontend bare lese koordinatene rett ut.
-    # Mellompunktene reverseres ved retning-flip — for én havpunkt spiller
-    # det ingen rolle, men det er korrekt og fremtidssikkert.
     if net >= 0:
         from_zone, to_zone = sone_a, sone_b
         from_point, to_point = point_a, point_b
@@ -255,7 +220,7 @@ def _net_flow(
         mw = -net
 
     return {
-        "id": f"{sone_a}-{sone_b}",       # kanonisk uavhengig av retning
+        "id": f"{sone_a}-{sone_b}",
         "from": from_zone,
         "to": to_zone,
         "from_point": from_point,
@@ -269,39 +234,38 @@ def _net_flow(
 
 
 # --------------------------------------------------------------------------
-# Hovedfunksjon: fetch_current_flows()
+# Hovedfunksjon: fetch_current_flows() med stale-fallback
 # --------------------------------------------------------------------------
 def fetch_current_flows() -> dict:
     """
     Henter siste kjente nettoflyt for alle 15 grenser, parallelt.
 
+    Cache-policy:
+      - Innen FRESH_TTL (1t): returner cache direkte, is_stale=False
+      - Etter FRESH_TTL: prøv å hente på nytt
+        - Hvis nytt forsøk gir minst like fyldig resultat som cachen:
+          cache det og returner med is_stale=False
+        - Hvis nytt forsøk gir vesentlig dårligere resultat (eller 0)
+          OG cachen er under STALE_TTL (24t): returner cache med
+          is_stale=True. Forhindrer at delvis ENTSO-E-utfall regredierer
+          en god cache til en nesten-tom respons.
+      - Hvis ingen cache og nytt forsøk feiler: returner tomt array.
+
     Returstruktur:
         {
-            "edges": [
-                {
-                    "id": "NO_2-NL",
-                    "from": "NO_2",
-                    "to":   "NL",
-                    "from_point": [6.79, 58.31],
-                    "to_point":   [6.83, 53.45],
-                    "mw": 700.0,
-                    "kind": "external",
-                    "cable": "NorNed",
-                    "timestamp": "2026-06-21T13:00:00+02:00",
-                },
-                ...
-            ]
+            "edges": [...],
+            "is_stale": bool,
         }
-
-    Tidligere returnerte vi også en separat `endpoints`-dict, men nå
-    ligger koordinatene innebygd per edge — det er enklere for frontend
-    og lar oss ha ulike endepunkter for f.eks. NO_4→SE_1 vs NO_4→SE_2.
     """
     cached = _cache.get("current")
+
+    # Fersk cache — returner uten å spørre ENTSO-E
     if cached is not None:
         ts, data = cached
-        if time.time() - ts <= CACHE_TTL_SECONDS:
-            return data
+        age = time.time() - ts
+        if age <= CACHE_TTL_FRESH_SECONDS:
+            # Shallow copy så vi ikke muterer det cachelagrede objektet
+            return {**data, "is_stale": False}
 
     get_client()
 
@@ -310,7 +274,6 @@ def fetch_current_flows() -> dict:
     start = now - pd.Timedelta(hours=6)
     end = now
 
-    # 30 kall (15 forbindelser × 2 retninger)
     jobs = []
     for conn in CONNECTIONS:
         jobs.append((conn["a"], conn["b"]))
@@ -336,13 +299,26 @@ def fetch_current_flows() -> dict:
         if edge is None:
             print(f"[flow_service] Ingen data for {conn['a']}↔{conn['b']}, hopper over")
             continue
-        # Begge endepunkter må være kjente koordinater
         if edge["from_point"] is None or edge["to_point"] is None:
             print(f"[flow_service] Mangler koordinat for {conn['a']}↔{conn['b']}, hopper over")
             continue
         edges.append(edge)
 
-    result = {"edges": edges}
+    # Stale fallback: hvis nytt resultat er tydelig dårligere enn cache,
+    # og cache er under STALE_TTL, foretrekk cache. Dekker både totalt
+    # utfall (0 edges) og delvis utfall (få edges pga rate limit).
+    if cached is not None:
+        prev_ts, prev_data = cached
+        prev_count = len(prev_data["edges"])
+        cache_age = time.time() - prev_ts
+        if len(edges) < prev_count and cache_age <= CACHE_TTL_STALE_SECONDS:
+            print(
+                f"[flow_service] Nytt forsøk ga {len(edges)} edges, cache har "
+                f"{prev_count} ({round(cache_age/3600, 1)}t gammel). Bruker stale cache."
+            )
+            return {**prev_data, "is_stale": True}
+
+    result = {"edges": edges, "is_stale": False}
 
     if edges:
         _cache["current"] = (time.time(), result)

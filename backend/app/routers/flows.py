@@ -19,6 +19,25 @@ def get_current_flows():
     med `kind` ("internal" eller "external") og evt. `cable`-navn.
     Endepunkts-koordinater følger med så frontend kan tegne pilene
     uten et eget oppslag.
+
+    Response-format:
+        {
+          "edges": [
+            {"id": "NO_2-NL", "from": "NO_2", "to": "NL",
+             "from_point": [lon, lat], "to_point": [lon, lat],
+             "via_points": [[lon, lat], ...],
+             "mw": 700.0, "kind": "external", "cable": "NorNed",
+             "timestamp": "2026-06-21T13:00:00+02:00"},
+            ...
+          ],
+          "is_stale": false
+        }
+
+    `is_stale=true` signaliserer at responsen kommer fra cache fordi
+    nytt forsøk feilet eller ga vesentlig færre edges enn cachen.
+    Stale-fallback gjelder innenfor 24t (CACHE_TTL_STALE_SECONDS i
+    flow_service.py). Frontend kan bruke flagget til å vise en
+    "data fra cache"-indikator når relevant.
     """
     try:
         return flow_service.fetch_current_flows()
