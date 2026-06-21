@@ -56,17 +56,17 @@ CONNECTIONS = [
     # mellom hvert par av soner, à la Electricity Maps. Hver pil blir
     # ~50–100 km lang og sitter i grenseområdet, ikke tvers gjennom landet.
     {"a": "NO_1", "b": "NO_2", "kind": "internal", "cable": None,
-     "a_point": [8.5, 59.6],   "b_point": [8.0, 59.1]},   # Telemark/Agder
+     "a_point": [9.84, 59.72],   "b_point": [8.63, 59.5]},   # Telemark/Agder
     {"a": "NO_1", "b": "NO_3", "kind": "internal", "cable": None,
-     "a_point": [10.8, 62.2],  "b_point": [10.5, 62.8]},  # Hedmark/Sør-Trøndelag
+     "a_point": [9.3, 61.48],  "b_point": [9.08, 61.87]},  # Hedmark/Sør-Trøndelag
     {"a": "NO_1", "b": "NO_5", "kind": "internal", "cable": None,
-     "a_point": [8.2, 60.5],   "b_point": [7.5, 60.5]},   # Hallingdal/Hardangervidda
+     "a_point": [10.15, 60.25],   "b_point": [8.41, 60.57]},   # Hallingdal/Hardangervidda
     {"a": "NO_2", "b": "NO_5", "kind": "internal", "cable": None,
-     "a_point": [6.5, 59.3],   "b_point": [6.3, 59.7]},   # Boknafjord/Ryfylke
+     "a_point": [6.33, 60.13],   "b_point": [5.84, 60.4]},   # Boknafjord/Ryfylke
     {"a": "NO_3", "b": "NO_4", "kind": "internal", "cable": None,
-     "a_point": [13.5, 65.0],  "b_point": [14.0, 65.8]},  # Helgeland
+     "a_point": [11.77, 64.48],  "b_point": [12.83, 64.7]},  # Helgeland
     {"a": "NO_3", "b": "NO_5", "kind": "internal", "cable": None,
-     "a_point": [7.0, 62.3],   "b_point": [6.7, 61.7]},   # Møre/Vestland-grensen
+     "a_point": [6.15, 61.24],   "b_point": [7.02, 61.22]},   # Møre/Vestland-grensen
 
     # ----- AC mot Sverige — ender ved faktiske transformatorstasjoner -----
     {"a": "NO_1", "b": "SE_3", "kind": "external", "cable": None,
