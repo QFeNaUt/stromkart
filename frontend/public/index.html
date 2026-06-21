@@ -516,7 +516,16 @@
           type: 'Feature',
           geometry: {
             type: 'LineString',
-            coordinates: [e.from_point, e.to_point],
+            // Geometri: [from_point, ...via_points, to_point]. For interne
+            // og AC-grenser er via tom, så vi får en vanlig to-punktslinje.
+            // For HVDC-sjøkabler har backend lagt inn ett mellompunkt ute
+            // i Nordsjøen/Skagerrak, slik at linjen "bøyer" naturlig ut
+            // og inn av landtakene i stedet for å gå rett gjennom land.
+            coordinates: [
+              e.from_point,
+              ...(Array.isArray(e.via_points) ? e.via_points : []),
+              e.to_point,
+            ],
           },
           properties: {
             id: e.id,

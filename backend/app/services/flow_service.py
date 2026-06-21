@@ -108,23 +108,27 @@ CONNECTIONS = [
     # ----- HVDC-sjøkabler — ender ved faktiske omformerstasjoner -----
     # Skagerrak 1–4: NO_2 ↔ DK_1
     {"a": "NO_2", "b": "DK_1", "kind": "external", "cable": "Skagerrak",
-     "a_point": [8.05,  58.13],   # Kristiansand-området (Kvarenesfjorden)
-     "b_point": [9.59,  56.49]},  # Tjele, Jylland
+     "a_point":   [8.05,  58.13],   # Kristiansand-området (Kvarenesfjorden)
+     "b_point":   [9.59,  56.49],   # Tjele, Jylland
+     "sea_point": [8.70,  57.50]},  # Skagerrak, nord-vest for Jylland
 
     # NordLink: NO_2 ↔ DE_LU
     {"a": "NO_2", "b": "DE_LU", "kind": "external", "cable": "NordLink",
-     "a_point": [6.71,  58.66],   # Tonstad, Sirdal
-     "b_point": [9.38,  53.93]},  # Wilster, Schleswig-Holstein
+     "a_point":   [6.71,  58.66],   # Tonstad, Sirdal
+     "b_point":   [9.38,  53.93],   # Wilster, Schleswig-Holstein
+     "sea_point": [6.50,  56.50]},  # Nordsjøen, vest for Jylland
 
     # North Sea Link: NO_2 ↔ GB
     {"a": "NO_2", "b": "GB", "kind": "external", "cable": "North Sea Link",
-     "a_point": [6.83,  59.49],   # Kvilldal, Suldal
-     "b_point": [-1.51, 55.13]},  # Blyth, Northumberland
+     "a_point":   [6.83,  59.49],   # Kvilldal, Suldal
+     "b_point":   [-1.51, 55.13],   # Blyth, Northumberland
+     "sea_point": [2.00,  57.00]},  # Midt i Nordsjøen
 
     # NorNed: NO_2 ↔ NL
     {"a": "NO_2", "b": "NL", "kind": "external", "cable": "NorNed",
-     "a_point": [6.79,  58.31],   # Feda, Kvinesdal
-     "b_point": [6.83,  53.45]},  # Eemshaven, Groningen
+     "a_point":   [6.79,  58.31],   # Feda, Kvinesdal
+     "b_point":   [6.83,  53.45],   # Eemshaven, Groningen
+     "sea_point": [5.00,  56.00]},  # Nordsjøen, vest for Danmark
 ]
 
 
@@ -227,16 +231,25 @@ def _net_flow(
     point_a = _endpoint(conn, "a")
     point_b = _endpoint(conn, "b")
 
+    # Valgfrie mellompunkter (kun definert for HVDC-sjøkabler). Lagres
+    # som liste — gjør det trivielt å utvide til flere "knekkpunkter"
+    # senere uten å endre datastrukturen. Tomt for AC og interne forb.
+    via_a_to_b = [conn["sea_point"]] if conn.get("sea_point") else []
+
     # Orienter edge i flytretningen så `mw` alltid er positiv. Bytt også
     # endepunktene så from_point matcher from-sonen og to_point matcher
     # to-sonen. Da kan frontend bare lese koordinatene rett ut.
+    # Mellompunktene reverseres ved retning-flip — for én havpunkt spiller
+    # det ingen rolle, men det er korrekt og fremtidssikkert.
     if net >= 0:
         from_zone, to_zone = sone_a, sone_b
         from_point, to_point = point_a, point_b
+        via_points = via_a_to_b
         mw = net
     else:
         from_zone, to_zone = sone_b, sone_a
         from_point, to_point = point_b, point_a
+        via_points = list(reversed(via_a_to_b))
         mw = -net
 
     return {
@@ -245,6 +258,7 @@ def _net_flow(
         "to": to_zone,
         "from_point": from_point,
         "to_point": to_point,
+        "via_points": via_points,
         "mw": round(mw, 1),
         "kind": conn["kind"],
         "cable": conn["cable"],
