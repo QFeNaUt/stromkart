@@ -83,7 +83,19 @@
       color: var(--text-dim); font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 14px;
     }
 
-    #info { top: 16px; left: 16px; min-width: 260px; }
+    #info-stack {
+      position: absolute; top: 16px; left: 16px; z-index: 10;
+      display: flex; flex-direction: column; gap: 10px;
+      max-width: 340px;
+    }
+    #info-stack .panel { position: static; }
+    #info { min-width: 260px; }
+    #desktop-balance { min-width: 280px; }
+    #desktop-balance.hidden { display: none; }
+    #desktop-balance .balance-title {
+      margin: 0 0 4px 0; font-size: 15px; font-weight: 600; letter-spacing: 0.2px;
+    }
+    #desktop-balance .balance-subtitle { margin-bottom: 12px; }
     #legend { bottom: 16px; left: 16px; min-width: 220px; }
     #controls { top: 96px; right: 16px; padding: 8px 10px; min-width: 160px; }
     #controls .subtitle { margin-bottom: 6px; }
@@ -145,7 +157,7 @@
 
     @media (max-width: 768px) {
       /* Skjul desktop UI */
-      #info, #legend, #controls { display: none !important; }
+      #info, #legend, #controls, #info-stack { display: none !important; }
       .maplibregl-popup { display: none !important; }
       /* Flytt skalaviser opp fra bunnen */
       .maplibregl-ctrl-bottom-right { bottom: 90px !important; transition: bottom 0.3s ease; }
@@ -153,8 +165,9 @@
       /* Bunnsheet struktur */
       #bottom-sheet {
         display: flex; flex-direction: column; position: absolute; bottom: 0; left: 0; right: 0;
-        height: 90vh;  /* Fallback for eldre nettlesere */
-        height: 90dvh; /* iOS Safari / Android Chrome: stabil med dynamisk adresselinje */
+        height: 100vh;  /* Fallback for eldre nettlesere */
+        height: 100dvh; /* iOS Safari / Android Chrome: stabil med dynamisk adresselinje */
+        padding-top: env(safe-area-inset-top); /* respekter iPhone-notch i full-state */
         background: var(--panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
         border-top: 1px solid var(--border); border-radius: 20px 20px 0 0;
         z-index: 100; box-shadow: 0 -8px 32px rgba(0,0,0,0.6);
@@ -413,13 +426,25 @@
 <body>
   <div id="map"></div>
 
-  <div id="info" class="panel">
-    <h1>Strømkart Norge</h1>
-    <div class="subtitle"><span class="pulse"></span>Sanntid · spotpris</div>
-    <table id="prices" class="prices-table"><tbody>
-      <tr><td colspan="2" style="color: var(--text-dim);">Laster…</td></tr>
-    </tbody></table>
-    <div id="error" class="status-err"></div>
+  <div id="info-stack">
+    <div id="info" class="panel">
+      <h1>Strømkart Norge</h1>
+      <div class="subtitle"><span class="pulse"></span>Sanntid · spotpris</div>
+      <table id="prices" class="prices-table"><tbody>
+        <tr><td colspan="2" style="color: var(--text-dim);">Laster…</td></tr>
+      </tbody></table>
+      <div id="error" class="status-err"></div>
+    </div>
+
+    <div id="desktop-balance" class="panel balance-section hidden">
+      <div class="balance-stale-banner">⚠ Bufret data</div>
+      <h1 class="balance-title">Forbruk og produksjon</h1>
+      <div class="balance-subtitle subtitle">Klikk en sone for å se</div>
+      <div class="balance-numbers"></div>
+      <div class="balance-bar"></div>
+      <div class="balance-detail"></div>
+      <div class="balance-meta"></div>
+    </div>
   </div>
 
   <div id="legend" class="panel">
@@ -490,12 +515,12 @@
       </div>
 
       <div class="sheet-section balance-section hidden" id="sheet-balance">
-        <div class="balance-stale-banner" id="balance-stale-banner">⚠ Bufret data</div>
+        <div class="balance-stale-banner">⚠ Bufret data</div>
         <div class="subtitle">Forbruk og produksjon</div>
-        <div class="balance-numbers" id="balance-numbers"></div>
-        <div class="balance-bar" id="balance-bar"></div>
-        <div class="balance-detail" id="balance-detail"></div>
-        <div class="balance-meta" id="balance-meta"></div>
+        <div class="balance-numbers"></div>
+        <div class="balance-bar"></div>
+        <div class="balance-detail"></div>
+        <div class="balance-meta"></div>
       </div>
 
       <div class="sheet-section">
@@ -1185,87 +1210,113 @@
     }
 
     function renderBalanceSection(zoneKey) {
-      const section = document.getElementById('sheet-balance');
-      if (!section) return;
+      // Henter ALLE balance-section-containere (mobil-sheet + desktop-panel)
+      // og rendrer det samme innholdet i hver. Bruker class-baserte selectors
+      // innenfor hver container slik at vi ikke får duplicate-ID-problemer.
+      const sections = document.querySelectorAll('.balance-section');
+      if (!sections.length) return;
 
-      // Skjul hvis toggle av eller ingen sone valgt
-      if (!balanceVisible || !zoneKey) {
-        section.classList.add('hidden');
-        return;
-      }
-      if (!balanceData || !balanceData.zones || !balanceData.zones[zoneKey]) {
+      // Felles tilstandsbestemmelse: skal seksjonen vises i det hele tatt?
+      const hide = !balanceVisible || !zoneKey;
+      const haveData = balanceData && balanceData.zones && zoneKey && balanceData.zones[zoneKey];
+
+      sections.forEach(section => {
+        if (hide) {
+          section.classList.add('hidden');
+          return;
+        }
         section.classList.remove('hidden');
-        document.getElementById('balance-numbers').innerHTML =
-          '<div class="stat"><span class="label">Status</span><span class="value">Ingen data</span></div>';
-        document.getElementById('balance-bar').innerHTML = '';
-        document.getElementById('balance-detail').innerHTML = '';
-        document.getElementById('balance-meta').textContent = '';
-        document.getElementById('balance-stale-banner').classList.remove('visible');
-        return;
-      }
 
-      section.classList.remove('hidden');
-      const z = balanceData.zones[zoneKey];
-      const isStale = balanceData.is_stale === true;
-      document.getElementById('balance-stale-banner').classList.toggle('visible', isStale);
+        const numbersEl = section.querySelector('.balance-numbers');
+        const barEl = section.querySelector('.balance-bar');
+        const detailEl = section.querySelector('.balance-detail');
+        const metaEl = section.querySelector('.balance-meta');
+        const banner = section.querySelector('.balance-stale-banner');
+        const subEl = section.querySelector('.balance-subtitle');
 
-      // --- Nøkkeltall: Produksjon · Forbruk · Netto ---
-      const prod = z.generation_mix ? z.generation_mix.total_mw : null;
-      const load = z.load_mw;
-      const net = z.net_balance_mw;
-      const netClass = net == null ? '' : (net >= 0 ? 'pos' : 'neg');
-      const netSign = net == null ? '' : (net >= 0 ? '+' : '');
-      document.getElementById('balance-numbers').innerHTML = `
-        <div class="stat"><span class="label">Produksjon</span><span class="value">${fmtMW(prod)}</span></div>
-        <div class="stat"><span class="label">Forbruk</span><span class="value">${fmtMW(load)}</span></div>
-        <div class="stat"><span class="label">Netto</span><span class="value ${netClass}">${net == null ? '—' : netSign + fmtMW(net)}</span></div>
-      `;
+        // Ingen data for valgt sone
+        if (!haveData) {
+          if (numbersEl) numbersEl.innerHTML =
+            '<div class="stat"><span class="label">Status</span><span class="value">Ingen data</span></div>';
+          if (barEl) barEl.innerHTML = '';
+          if (detailEl) detailEl.innerHTML = '';
+          if (metaEl) metaEl.textContent = '';
+          if (banner) banner.classList.remove('visible');
+          if (subEl) subEl.textContent = '—';
+          return;
+        }
 
-      // --- Stablet søyle ---
-      const bar = document.getElementById('balance-bar');
-      if (z.generation_mix && z.generation_mix.total_mw > 0) {
-        const total = z.generation_mix.total_mw;
-        const summary = z.generation_mix.summary;
-        bar.innerHTML = BUCKET_ORDER
-          .filter(b => (summary[b] || 0) > 0)
-          .map(b => {
-            const pct = (summary[b] / total) * 100;
-            return `<div class="seg ${b}" style="width: ${pct.toFixed(2)}%;" title="${b}: ${pct.toFixed(1)}%"></div>`;
-          }).join('');
-      } else {
-        bar.innerHTML = '';
-      }
+        const z = balanceData.zones[zoneKey];
+        const isStale = balanceData.is_stale === true;
+        if (banner) banner.classList.toggle('visible', isStale);
 
-      // --- Detaljtabell (sortert synkende på MW) ---
-      const detail = document.getElementById('balance-detail');
-      if (z.generation_mix && z.generation_mix.detailed) {
-        const total = z.generation_mix.total_mw || 1;
-        const rows = Object.entries(z.generation_mix.detailed)
-          .filter(([, mw]) => mw > 0)
-          .sort((a, b) => b[1] - a[1])
-          .map(([name, mw]) => {
-            const bucket = PSR_NAME_TO_BUCKET[name] || 'annet';
-            const color = BUCKET_HEX[bucket];
-            const pct = ((mw / total) * 100).toFixed(1);
-            const label = PSR_NAME_NO[name] || name;
-            return `<div class="row">
-              <span class="dot" style="background: ${color};"></span>
-              <span class="name">${label}</span>
-              <span class="mw">${fmtMW(mw)}</span>
-              <span class="pct">${pct} %</span>
-            </div>`;
-          }).join('');
-        detail.innerHTML = rows;
-      } else {
-        detail.innerHTML = '';
-      }
+        // Subtitle på desktop-panelet viser hvilken sone som er aktiv
+        if (subEl) {
+          const region = ZONE_NAMES[zoneKey.replace('_', '')] || zoneKey;
+          subEl.textContent = `${region} (${zoneKey.replace('_', '')})`;
+        }
 
-      // --- Metadata: tidsstempler ---
-      const meta = document.getElementById('balance-meta');
-      const loadTs = z.load_timestamp ? new Date(z.load_timestamp) : null;
-      const genTs = z.generation_timestamp ? new Date(z.generation_timestamp) : null;
-      const fmtT = d => d ? d.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—';
-      meta.textContent = `Forbruk kl ${fmtT(loadTs)} · produksjon kl ${fmtT(genTs)}`;
+        // --- Nøkkeltall: Produksjon · Forbruk · Netto ---
+        const prod = z.generation_mix ? z.generation_mix.total_mw : null;
+        const load = z.load_mw;
+        const net = z.net_balance_mw;
+        const netClass = net == null ? '' : (net >= 0 ? 'pos' : 'neg');
+        const netSign = net == null ? '' : (net >= 0 ? '+' : '');
+        if (numbersEl) numbersEl.innerHTML = `
+          <div class="stat"><span class="label">Produksjon</span><span class="value">${fmtMW(prod)}</span></div>
+          <div class="stat"><span class="label">Forbruk</span><span class="value">${fmtMW(load)}</span></div>
+          <div class="stat"><span class="label">Netto</span><span class="value ${netClass}">${net == null ? '—' : netSign + fmtMW(net)}</span></div>
+        `;
+
+        // --- Stablet søyle ---
+        if (barEl) {
+          if (z.generation_mix && z.generation_mix.total_mw > 0) {
+            const total = z.generation_mix.total_mw;
+            const summary = z.generation_mix.summary;
+            barEl.innerHTML = BUCKET_ORDER
+              .filter(b => (summary[b] || 0) > 0)
+              .map(b => {
+                const pct = (summary[b] / total) * 100;
+                return `<div class="seg ${b}" style="width: ${pct.toFixed(2)}%;" title="${b}: ${pct.toFixed(1)}%"></div>`;
+              }).join('');
+          } else {
+            barEl.innerHTML = '';
+          }
+        }
+
+        // --- Detaljtabell (sortert synkende på MW) ---
+        if (detailEl) {
+          if (z.generation_mix && z.generation_mix.detailed) {
+            const total = z.generation_mix.total_mw || 1;
+            const rows = Object.entries(z.generation_mix.detailed)
+              .filter(([, mw]) => mw > 0)
+              .sort((a, b) => b[1] - a[1])
+              .map(([name, mw]) => {
+                const bucket = PSR_NAME_TO_BUCKET[name] || 'annet';
+                const color = BUCKET_HEX[bucket];
+                const pct = ((mw / total) * 100).toFixed(1);
+                const label = PSR_NAME_NO[name] || name;
+                return `<div class="row">
+                  <span class="dot" style="background: ${color};"></span>
+                  <span class="name">${label}</span>
+                  <span class="mw">${fmtMW(mw)}</span>
+                  <span class="pct">${pct} %</span>
+                </div>`;
+              }).join('');
+            detailEl.innerHTML = rows;
+          } else {
+            detailEl.innerHTML = '';
+          }
+        }
+
+        // --- Metadata: tidsstempler ---
+        if (metaEl) {
+          const loadTs = z.load_timestamp ? new Date(z.load_timestamp) : null;
+          const genTs = z.generation_timestamp ? new Date(z.generation_timestamp) : null;
+          const fmtT = d => d ? d.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—';
+          metaEl.textContent = `Forbruk kl ${fmtT(loadTs)} · produksjon kl ${fmtT(genTs)}`;
+        }
+      });
     }
 
     
