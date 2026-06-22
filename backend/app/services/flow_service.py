@@ -58,7 +58,7 @@ CONNECTIONS = [
     {"a": "NO_1", "b": "NO_2", "kind": "internal", "cable": None,
      "a_point": [9.84, 59.72],   "b_point": [8.63, 59.5]},   # Telemark/Agder
     {"a": "NO_1", "b": "NO_3", "kind": "internal", "cable": None,
-     "a_point": [9.3, 61.48],  "b_point": [9.08, 61.87]},  # Hedmark/Sør-Trøndelag
+     "a_point": [9.3, 61.48],  "b_point": [9.08, 61.87]},  # Innlandet/Sør-Trøndelag
     {"a": "NO_1", "b": "NO_5", "kind": "internal", "cable": None,
      "a_point": [10.15, 60.25],   "b_point": [8.41, 60.57]},   # Hallingdal/Hardangervidda
     {"a": "NO_2", "b": "NO_5", "kind": "internal", "cable": None,
@@ -97,7 +97,17 @@ CONNECTIONS = [
      "sea_points": [[6.50, 56.50]]},
     {"a": "NO_2", "b": "GB", "kind": "external", "cable": "North Sea Link",
      "a_point":    [6.83, 59.49],   "b_point": [-1.51, 55.13],
-     "sea_points": [[2.00, 57.00]]},
+     "sea_points": [
+         [6.5024, 59.5390],  # Landtak Norge
+         [6.1527, 59.3826],  # Fjord/kyst
+         [5.3989, 59.0981],  # Kyst/Nordsjøen
+         [1.5561, 57.1176],  # Midt-Nordsjøen
+         [0.9738, 56.3594],  # Midt-Nordsjøen
+         [-0.1617, 55.9884], # Midt-Nordsjøen
+         [-0.4160, 55.6245], # Midt-Nordsjøen
+         [-1.0617, 55.2515], # Nærmer seg UK
+         [-1.5434, 55.1223]  # Landtak UK
+     ]},
     {"a": "NO_2", "b": "NL", "kind": "external", "cable": "NorNed",
      "a_point":    [6.79, 58.31],   "b_point": [6.83, 53.45],
      # Trasé approksimert etter 4C Offshore Interactive Map: nesten rett
