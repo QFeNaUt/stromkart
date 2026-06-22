@@ -322,6 +322,8 @@
         position: absolute;
         bottom: 100%;  /* sitter rett over sheetets toppkant, følger sheet-transformen */
         left: 12px; right: 12px;
+        width: auto;          /* overstyr min(540px, ...) fra .time-slider-wrap */
+        transform: none;      /* overstyr translateX(-50%) fra .time-slider-wrap */
         margin-bottom: 8px;
         padding: 4px 12px 4px;  /* ~25% lavere — trimmet topp/bunn */
         background: var(--panel);
