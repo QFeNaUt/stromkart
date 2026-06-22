@@ -183,6 +183,55 @@
       .sheet-section .subtitle { margin-bottom: 12px; }
     }
 
+    /* ---------- Forbruk og produksjon (balance) ----------- */
+    .balance-section { /* arver .sheet-section */ }
+    .balance-section.hidden { display: none; }
+    .balance-stale-banner {
+      display: none; margin-bottom: 8px; padding: 6px 10px;
+      background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 6px; font-size: 12px; color: #fbbf24;
+    }
+    .balance-stale-banner.visible { display: block; }
+    .balance-numbers {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      font-size: 13px; font-variant-numeric: tabular-nums;
+      margin-bottom: 10px;
+    }
+    .balance-numbers .stat { display: flex; flex-direction: column; gap: 2px; }
+    .balance-numbers .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+    .balance-numbers .stat .value { font-size: 15px; font-weight: 600; color: var(--text); }
+    .balance-numbers .stat .value.pos { color: #22c55e; }
+    .balance-numbers .stat .value.neg { color: #f97316; }
+    .balance-bar {
+      display: flex; width: 100%; height: 14px; border-radius: 4px;
+      overflow: hidden; background: #21262d; margin-bottom: 12px;
+    }
+    .balance-bar .seg { height: 100%; }
+    .balance-bar .seg.vann    { background: #3b82f6; }
+    .balance-bar .seg.vind    { background: #22c55e; }
+    .balance-bar .seg.sol     { background: #eab308; }
+    .balance-bar .seg.termisk { background: #f97316; }
+    .balance-bar .seg.fossile { background: #8F5342; }
+    .balance-bar .seg.annet   { background: #737373; }
+    .balance-detail {
+      display: flex; flex-direction: column; gap: 4px;
+      font-size: 12.5px; font-variant-numeric: tabular-nums;
+    }
+    .balance-detail .row {
+      display: grid; grid-template-columns: 14px 1fr auto auto;
+      align-items: center; gap: 8px; padding: 3px 0;
+    }
+    .balance-detail .row .dot {
+      width: 10px; height: 10px; border-radius: 2px;
+    }
+    .balance-detail .row .name { color: var(--text); }
+    .balance-detail .row .mw { color: var(--text-dim); }
+    .balance-detail .row .pct { color: var(--text-dim); min-width: 42px; text-align: right; }
+    .balance-meta {
+      margin-top: 10px; font-size: 11px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
     /* ---------- Time Slider -------------------------------- */
     .time-slider-wrap {
       position: absolute;
@@ -385,6 +434,7 @@
     <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris" checked> <span>Spotpris</span></label>
     <label class="layer-toggle"><input type="checkbox" id="toggle-flyt" checked> <span>Kraftflyt</span></label>
     <label class="layer-toggle"><input type="checkbox" id="toggle-magasin" checked> <span>Magasinfylling</span></label>
+    <label class="layer-toggle"><input type="checkbox" id="toggle-balance" checked> <span>Forbruk og produksjon</span></label>
   </div>
 
   <div id="time-slider-desktop" class="panel time-slider-wrap hidden">
@@ -439,6 +489,15 @@
         <div id="sheet-context-desc">Velg et område i kartet, eller dra opp</div>
       </div>
 
+      <div class="sheet-section balance-section hidden" id="sheet-balance">
+        <div class="balance-stale-banner" id="balance-stale-banner">⚠ Bufret data</div>
+        <div class="subtitle">Forbruk og produksjon</div>
+        <div class="balance-numbers" id="balance-numbers"></div>
+        <div class="balance-bar" id="balance-bar"></div>
+        <div class="balance-detail" id="balance-detail"></div>
+        <div class="balance-meta" id="balance-meta"></div>
+      </div>
+
       <div class="sheet-section">
         <div class="subtitle">Priser nå</div>
         <table id="prices-mobile" class="prices-table"><tbody>
@@ -451,6 +510,7 @@
         <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris-m" checked> <span>Spotpris</span></label>
         <label class="layer-toggle"><input type="checkbox" id="toggle-flyt-m" checked> <span>Kraftflyt</span></label>
         <label class="layer-toggle"><input type="checkbox" id="toggle-magasin-m" checked> <span>Magasinfylling</span></label>
+        <label class="layer-toggle"><input type="checkbox" id="toggle-balance-m" checked> <span>Forbruk og produksjon</span></label>
       </div>
 
       <div class="sheet-section">
@@ -711,11 +771,12 @@
       return fetch(url);
     }
 
-    let todayPrices = {}; let zonesData = null; let flowsData = null; let flowsFlagsData = null; let reservoirsData = null;
+    let todayPrices = {}; let zonesData = null; let flowsData = null; let flowsFlagsData = null; let reservoirsData = null; let balanceData = null;
     const ZONE_CENTROIDS = { 'NO_1': [10.5, 60.5], 'NO_2': [7.5, 58.8], 'NO_3': [10.5, 63.5], 'NO_4': [18.0, 68.5], 'NO_5': [6.5, 60.5] };
     
     let overlayHandlersAttached = false; let initialFitDone = false;
-    let spotPriceVisible = true; let flowsVisible = true; let flowsIsStale = false; let reservoirsVisible = true;
+    let spotPriceVisible = true; let flowsVisible = true; let flowsIsStale = false; let reservoirsVisible = true; let balanceVisible = true;
+    let selectedZone = null; // hvilken sone som er aktiv i sheet-konteksten (for re-render av balance)
 
     // Time-slider state
     let timeAxis = [];          // Date[] — kanonisk tidsakse (lengste sone-serie)
@@ -733,10 +794,11 @@
     async function loadData() {
       try {
         const errorDiv = document.getElementById('error'); errorDiv.textContent = '';
-        const [zonesRes, pricesRes, todayRes, flowsRes, reservoirsRes] = await Promise.all([
+        const [zonesRes, pricesRes, todayRes, flowsRes, reservoirsRes, balanceRes] = await Promise.all([
           fetchWithRetry(`${API_BASE}/api/zones/`), fetchWithRetry(`${API_BASE}/api/prices/current`),
           fetchWithRetry(`${API_BASE}/api/prices/today`), fetchWithRetry(`${API_BASE}/api/flows/current`),
           fetchWithRetry(`${API_BASE}/api/reservoirs/current`),
+          fetchWithRetry(`${API_BASE}/api/balance/current`),
         ]);
 
         if (!zonesRes.ok) throw new Error(`/api/zones failed`);
@@ -747,6 +809,7 @@
         todayPrices = todayRes.ok ? await todayRes.json() : {};
         const flows = flowsRes.ok ? await flowsRes.json() : null;
         reservoirsData = reservoirsRes.ok ? (await reservoirsRes.json()).areas : null;
+        balanceData = balanceRes.ok ? await balanceRes.json() : null;
 
         // Bygg tidsakse fra dagens serie. Hvis vi har en tidsakse, dikteres
         // sone-prisene av (currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
@@ -823,6 +886,7 @@
       if (flowsData) addFlowLayers();
       if (reservoirsData) addReservoirLayer();
       updateOverlayVisibility();
+      if (selectedZone) renderBalanceSection(selectedZone);
 
       if (!overlayHandlersAttached) {
         // Desktop Hover
@@ -954,13 +1018,16 @@
       if (f.layer.id === 'zones-fill') {
         const zone = p.zoneName, region = ZONE_NAMES[zone] || '';
         const priceOre = p.price_ore_kwh != null ? p.price_ore_kwh.toFixed(1) : '—';
-        const resInfo = reservoirsData ? reservoirsData[`NO_${zone.slice(2)}`] : null;
+        const zoneKey = `NO_${zone.slice(2)}`; // "NO2" -> "NO_2"
+        const resInfo = reservoirsData ? reservoirsData[zoneKey] : null;
         const resTxt = resInfo && resInfo.fill_percent != null ? ` • Magasin: ${resInfo.fill_percent.toFixed(1)}%` : '';
         titleEl.textContent = `${region} (${zone})`;
         descEl.textContent = `Spotpris: ${priceOre} øre/kWh${resTxt}`;
         
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], zone]);
         map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
+        selectedZone = zoneKey;
+        renderBalanceSection(zoneKey);
       } 
       else if (f.layer.id.startsWith('flows-')) {
         const dirLbl = { export: 'Eksport', import: 'Import', internal: 'Internflyt' }[p.direction] || 'Flyt';
@@ -969,6 +1036,8 @@
         
         map.setFilter('flows-highlight', ['==', ['get', 'id'], p.id]);
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
+        selectedZone = null;
+        renderBalanceSection(null);
       }
       else if (f.layer.id === 'reservoirs-layer') {
         const shortZone = p.zone.replace('_', ''), region = ZONE_NAMES[shortZone] || '';
@@ -977,6 +1046,9 @@
         
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], shortZone]);
         map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
+        // Magasin-tap aktiverer også sonens balance (samme NO_x).
+        selectedZone = p.zone; // p.zone er allerede "NO_x"-format
+        renderBalanceSection(p.zone);
       }
       
       setSheetState('half');
@@ -987,6 +1059,8 @@
       document.getElementById('sheet-context-desc').textContent = 'Velg et område i kartet, eller dra opp';
       if (map.getLayer('zones-highlight')) map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
       if (map.getLayer('flows-highlight')) map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
+      selectedZone = null;
+      renderBalanceSection(null);
       setSheetState('peek');
     }
 
@@ -1056,9 +1130,153 @@
       document.getElementById(`toggle-${idBase}-m`).addEventListener('change', handler);
     }
 
+    // ---------------------------------------------------------
+    // Forbruk og produksjon (balance) — rendering
+    // ---------------------------------------------------------
+    const PSR_NAME_NO = {
+      'Hydro Water Reservoir':           'Vannmagasin',
+      'Hydro Run-of-river and poundage': 'Elvekraft',
+      'Hydro Pumped Storage':            'Pumpekraft',
+      'Wind Onshore':                    'Vindkraft (land)',
+      'Wind Offshore':                   'Vindkraft (hav)',
+      'Solar':                           'Solkraft',
+      'Biomass':                         'Biomasse',
+      'Waste':                           'Avfall',
+      'Fossil Gas':                      'Fossil gass',
+      'Fossil Hard coal':                'Steinkull',
+      'Fossil Brown coal/Lignite':       'Brunkull',
+      'Fossil Oil':                      'Fossil olje',
+      'Fossil Oil shale':                'Oljeskifer',
+      'Fossil Peat':                     'Torv',
+      'Fossil Coal-derived gas':         'Kullgass',
+      'Geothermal':                      'Geotermisk',
+      'Marine':                          'Tidevann/bølge',
+      'Nuclear':                         'Kjernekraft',
+      'Other renewable':                 'Annet fornybart',
+      'Other':                           'Annet',
+    };
+    const PSR_NAME_TO_BUCKET = {
+      'Hydro Water Reservoir':           'vann',
+      'Hydro Run-of-river and poundage': 'vann',
+      'Hydro Pumped Storage':            'vann',
+      'Wind Onshore':                    'vind',
+      'Wind Offshore':                   'vind',
+      'Solar':                           'sol',
+      'Biomass':                         'termisk',
+      'Waste':                           'termisk',
+      'Fossil Gas':                      'fossile',
+      'Fossil Hard coal':                'fossile',
+      'Fossil Brown coal/Lignite':       'fossile',
+      'Fossil Oil':                      'fossile',
+      'Fossil Oil shale':                'fossile',
+      'Fossil Peat':                     'fossile',
+      'Fossil Coal-derived gas':         'fossile',
+    };
+    const BUCKET_HEX = {
+      vann: '#3b82f6', vind: '#22c55e', sol: '#eab308',
+      termisk: '#f97316', fossile: '#8F5342', annet: '#737373',
+    };
+    const BUCKET_ORDER = ['vann', 'vind', 'sol', 'termisk', 'fossile', 'annet'];
+
+    function fmtMW(mw) {
+      if (mw == null) return '—';
+      // Tusenseparator med non-breaking space
+      return Math.round(mw).toLocaleString('nb-NO').replace(/,/g, '\u00a0') + ' MW';
+    }
+
+    function renderBalanceSection(zoneKey) {
+      const section = document.getElementById('sheet-balance');
+      if (!section) return;
+
+      // Skjul hvis toggle av eller ingen sone valgt
+      if (!balanceVisible || !zoneKey) {
+        section.classList.add('hidden');
+        return;
+      }
+      if (!balanceData || !balanceData.zones || !balanceData.zones[zoneKey]) {
+        section.classList.remove('hidden');
+        document.getElementById('balance-numbers').innerHTML =
+          '<div class="stat"><span class="label">Status</span><span class="value">Ingen data</span></div>';
+        document.getElementById('balance-bar').innerHTML = '';
+        document.getElementById('balance-detail').innerHTML = '';
+        document.getElementById('balance-meta').textContent = '';
+        document.getElementById('balance-stale-banner').classList.remove('visible');
+        return;
+      }
+
+      section.classList.remove('hidden');
+      const z = balanceData.zones[zoneKey];
+      const isStale = balanceData.is_stale === true;
+      document.getElementById('balance-stale-banner').classList.toggle('visible', isStale);
+
+      // --- Nøkkeltall: Produksjon · Forbruk · Netto ---
+      const prod = z.generation_mix ? z.generation_mix.total_mw : null;
+      const load = z.load_mw;
+      const net = z.net_balance_mw;
+      const netClass = net == null ? '' : (net >= 0 ? 'pos' : 'neg');
+      const netSign = net == null ? '' : (net >= 0 ? '+' : '');
+      document.getElementById('balance-numbers').innerHTML = `
+        <div class="stat"><span class="label">Produksjon</span><span class="value">${fmtMW(prod)}</span></div>
+        <div class="stat"><span class="label">Forbruk</span><span class="value">${fmtMW(load)}</span></div>
+        <div class="stat"><span class="label">Netto</span><span class="value ${netClass}">${net == null ? '—' : netSign + fmtMW(net)}</span></div>
+      `;
+
+      // --- Stablet søyle ---
+      const bar = document.getElementById('balance-bar');
+      if (z.generation_mix && z.generation_mix.total_mw > 0) {
+        const total = z.generation_mix.total_mw;
+        const summary = z.generation_mix.summary;
+        bar.innerHTML = BUCKET_ORDER
+          .filter(b => (summary[b] || 0) > 0)
+          .map(b => {
+            const pct = (summary[b] / total) * 100;
+            return `<div class="seg ${b}" style="width: ${pct.toFixed(2)}%;" title="${b}: ${pct.toFixed(1)}%"></div>`;
+          }).join('');
+      } else {
+        bar.innerHTML = '';
+      }
+
+      // --- Detaljtabell (sortert synkende på MW) ---
+      const detail = document.getElementById('balance-detail');
+      if (z.generation_mix && z.generation_mix.detailed) {
+        const total = z.generation_mix.total_mw || 1;
+        const rows = Object.entries(z.generation_mix.detailed)
+          .filter(([, mw]) => mw > 0)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, mw]) => {
+            const bucket = PSR_NAME_TO_BUCKET[name] || 'annet';
+            const color = BUCKET_HEX[bucket];
+            const pct = ((mw / total) * 100).toFixed(1);
+            const label = PSR_NAME_NO[name] || name;
+            return `<div class="row">
+              <span class="dot" style="background: ${color};"></span>
+              <span class="name">${label}</span>
+              <span class="mw">${fmtMW(mw)}</span>
+              <span class="pct">${pct} %</span>
+            </div>`;
+          }).join('');
+        detail.innerHTML = rows;
+      } else {
+        detail.innerHTML = '';
+      }
+
+      // --- Metadata: tidsstempler ---
+      const meta = document.getElementById('balance-meta');
+      const loadTs = z.load_timestamp ? new Date(z.load_timestamp) : null;
+      const genTs = z.generation_timestamp ? new Date(z.generation_timestamp) : null;
+      const fmtT = d => d ? d.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—';
+      meta.textContent = `Forbruk kl ${fmtT(loadTs)} · produksjon kl ${fmtT(genTs)}`;
+    }
+
+    
     bindToggle('spotpris', v => { spotPriceVisible = v; if (!v) zonePopup.remove(); });
     bindToggle('flyt', v => { flowsVisible = v; if (!v) flowPopup.remove(); });
     bindToggle('magasin', v => { reservoirsVisible = v; });
+    bindToggle('balance', v => {
+      balanceVisible = v;
+      // Re-render: viser/skjuler seksjonen basert på toggle + om sone er valgt.
+      renderBalanceSection(selectedZone);
+    });
 
     // ---------------------------------------------------------
     // Time-slider: build axis, render at index, play/pause, snap-to-now
