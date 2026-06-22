@@ -29,7 +29,10 @@ async def get_current_balance() -> dict:
           "load_mw": 5234.0,
           "load_timestamp": "2026-06-22T11:45:00+02:00",
           "generation_mix": {
-            "summary": {"vann": 4820.0, "vind": 312.0, "sol": 5.0, "termisk_annet": 18.0},
+            "summary": {
+              "vann": 4820.0, "vind": 312.0, "sol": 5.0,
+              "termisk": 12.0, "fossile": 0.0, "annet": 6.0
+            },
             "detailed": {"Hydro Water Reservoir": 4520.0, ...},
             "total_mw": 5155.0
           },

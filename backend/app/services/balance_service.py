@@ -29,14 +29,38 @@ STALE_TTL = 86400         # 24 timer
 RATE_LIMIT_BACKOFF = 5    # sekunder
 
 # Human-readable PSR-navn (slik entsoe-py returnerer dem) -> summary-bøtte.
-# Alt som ikke matcher havner i "termisk_annet".
+# Alt som ikke matcher eksplisitt havner i "annet".
+#
+# Summary-bøtter og fargepalett (referanse for frontend):
+#   vann      → #3b82f6 (blå, matcher batteri-ikon)
+#   vind      → #22c55e (grønn)
+#   sol       → #eab308 (gul)
+#   termisk   → varm oransje  — biomasse og avfall (fornybar termisk)
+#   fossile   → #8F5342 (brun) — gass, kull, olje, torv, oljeskifer
+#   annet     → #737373 (grå)  — geotermisk, marin, kjernekraft, øvrig
 PSR_NAME_TO_SUMMARY = {
+    # Vann
     "Hydro Water Reservoir":            "vann",
     "Hydro Run-of-river and poundage":  "vann",
     "Hydro Pumped Storage":             "vann",
+    # Vind
     "Wind Onshore":                     "vind",
     "Wind Offshore":                    "vind",
+    # Sol
     "Solar":                            "sol",
+    # Termisk (fornybar/avfall)
+    "Biomass":                          "termisk",
+    "Waste":                            "termisk",
+    # Fossile
+    "Fossil Gas":                       "fossile",
+    "Fossil Hard coal":                 "fossile",
+    "Fossil Brown coal/Lignite":        "fossile",
+    "Fossil Oil":                       "fossile",
+    "Fossil Oil shale":                 "fossile",
+    "Fossil Peat":                      "fossile",
+    "Fossil Coal-derived gas":          "fossile",
+    # Resten ("Geothermal", "Marine", "Nuclear", "Other renewable", "Other")
+    # faller til "annet" via default i _summary_from_detailed().
 }
 
 # ----- In-memory cache -----
@@ -54,10 +78,17 @@ def _get_client() -> EntsoePandasClient:
 
 
 def _summary_from_detailed(detailed: Dict[str, float]) -> Dict[str, float]:
-    """Aggregér PSR-typer til 4 hovedbøtter for kompakt søyle."""
-    summary = {"vann": 0.0, "vind": 0.0, "sol": 0.0, "termisk_annet": 0.0}
+    """Aggregér PSR-typer til 6 hovedbøtter for kompakt søyle."""
+    summary = {
+        "vann":    0.0,
+        "vind":    0.0,
+        "sol":     0.0,
+        "termisk": 0.0,
+        "fossile": 0.0,
+        "annet":   0.0,
+    }
     for psr_name, mw in detailed.items():
-        bucket = PSR_NAME_TO_SUMMARY.get(psr_name, "termisk_annet")
+        bucket = PSR_NAME_TO_SUMMARY.get(psr_name, "annet")
         summary[bucket] += mw
     return summary
 
