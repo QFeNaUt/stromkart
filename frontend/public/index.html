@@ -1023,10 +1023,8 @@
 
     function handleFlowLeave() { if (window.innerWidth > 768) { map.getCanvas().style.cursor = ''; flowPopup.remove(); } }
 
-    // Mobil Klikk-håndtering
+    // Klikk-håndtering (mobil + desktop)
     function handleMapClick(e) {
-      if (window.innerWidth > 768) return;
-
       // Defensiv filtrering: hvis brukeren tapper før alle lag er rendret,
       // unngå å sende lag-IDer som ikke finnes (MapLibre advarer / returnerer tomt).
       const candidateLayers = ['flows-arrow', 'flows-line', 'reservoirs-layer', 'zones-fill'];
@@ -1076,7 +1074,7 @@
         renderBalanceSection(p.zone);
       }
       
-      setSheetState('half');
+      if (window.innerWidth <= 768) setSheetState('half');
     }
 
     function clearMobileSelection() {
@@ -1086,7 +1084,7 @@
       if (map.getLayer('flows-highlight')) map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
       selectedZone = null;
       renderBalanceSection(null);
-      setSheetState('peek');
+      if (window.innerWidth <= 768) setSheetState('peek');
     }
 
     function renderSparkline(zoneSeries, accent, selectedIdx) {
