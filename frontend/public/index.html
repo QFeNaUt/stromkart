@@ -182,6 +182,129 @@
       .sheet-section { margin-bottom: 24px; }
       .sheet-section .subtitle { margin-bottom: 12px; }
     }
+
+    /* ---------- Time Slider -------------------------------- */
+    .time-slider-wrap {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(540px, calc(100vw - 32px));
+      padding: 12px 16px 10px;
+      z-index: 10;
+    }
+    .time-slider-wrap.hidden { display: none; }
+
+    .time-slider-top {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+    }
+    .time-slider-btn {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 5px 11px; font-size: 12px; cursor: pointer;
+      font-family: inherit; font-variant-numeric: tabular-nums;
+      transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+      min-height: 28px;
+    }
+    .time-slider-btn:hover { background: rgba(255, 255, 255, 0.05); border-color: var(--accent); }
+    .time-slider-btn:active { background: rgba(88, 166, 255, 0.15); }
+    .time-slider-btn.at-now { opacity: 0.35; cursor: default; }
+    .time-slider-btn.at-now:hover { background: transparent; border-color: var(--border); }
+    .time-slider-play { min-width: 36px; font-size: 13px; }
+
+    .time-slider-label {
+      flex: 1; text-align: center; font-size: 13px;
+      color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: 0.2px;
+    }
+    .time-slider-label .live-dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--c-low); margin-right: 6px; vertical-align: middle;
+      animation: pulse 2s infinite;
+    }
+
+    .time-slider-track-wrap {
+      position: relative; height: 22px; display: flex; align-items: center;
+    }
+    .time-slider-range {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; background: #21262d;
+      border-radius: 2px; outline: none; margin: 0;
+      position: relative; z-index: 3; cursor: pointer;
+    }
+    .time-slider-range::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg);
+      cursor: grab; box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+    .time-slider-range::-webkit-slider-thumb:active { cursor: grabbing; }
+    .time-slider-range::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg);
+      cursor: grab; box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+
+    /* "Nå"-markør (hvit vertikal linje på track) */
+    .time-slider-now-marker {
+      position: absolute; top: 3px; bottom: 3px;
+      width: 2px; background: rgba(255, 255, 255, 0.65);
+      border-radius: 1px; pointer-events: none; z-index: 2;
+      transform: translateX(-50%);
+      display: none;
+    }
+    .time-slider-now-marker.visible { display: block; }
+
+    /* Døgnskille-markør (amber) */
+    .time-slider-day-marker {
+      position: absolute; top: 0; bottom: 0;
+      width: 1.5px; background: #f59e0b;
+      pointer-events: none; z-index: 2;
+      transform: translateX(-50%);
+      display: none;
+    }
+    .time-slider-day-marker.visible { display: block; }
+
+    .time-slider-ticks {
+      display: flex; justify-content: space-between; margin-top: 6px;
+      font-size: 10px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums; letter-spacing: 0.4px;
+      padding: 0 2px;
+    }
+    .time-slider-ticks span { width: 0; text-align: center; transform: translateX(-50%); }
+    .time-slider-ticks span:first-child { transform: translateX(0); text-align: left; }
+    .time-slider-ticks span:last-child { transform: translateX(-100%); text-align: right; }
+
+    /* Mobil: skjul desktop, vis mobilversjon inne i sheetet */
+    .time-slider-mobile { display: none; }
+    @media (max-width: 768px) {
+      #time-slider-desktop { display: none !important; }
+      .time-slider-mobile {
+        display: block;
+        position: absolute;
+        bottom: 100%;  /* sitter rett over sheetets toppkant, følger sheet-transformen */
+        left: 12px; right: 12px;
+        margin-bottom: 8px;
+        padding: 10px 14px 8px;
+        background: var(--panel);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--border); border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+        transition: opacity 0.2s ease;
+        touch-action: manipulation; /* tillat tap/drag på range, ingen double-tap zoom */
+      }
+      .time-slider-mobile.full-hidden {
+        opacity: 0; pointer-events: none;
+      }
+      .time-slider-mobile.hidden { display: none; }
+      .time-slider-mobile .time-slider-top { margin-bottom: 8px; gap: 10px; }
+      .time-slider-mobile .time-slider-label { font-size: 12.5px; }
+      .time-slider-mobile .time-slider-range { height: 6px; }
+      .time-slider-mobile .time-slider-range::-webkit-slider-thumb { width: 22px; height: 22px; }
+      .time-slider-mobile .time-slider-range::-moz-range-thumb { width: 22px; height: 22px; }
+      .time-slider-mobile .time-slider-btn {
+        padding: 7px 12px; font-size: 13px; min-height: 34px;  /* touch target */
+      }
+    }
   </style>
 </head>
 
@@ -211,7 +334,39 @@
     <label class="layer-toggle"><input type="checkbox" id="toggle-magasin" checked> <span>Magasinfylling</span></label>
   </div>
 
+  <div id="time-slider-desktop" class="panel time-slider-wrap hidden">
+    <div class="time-slider-top">
+      <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
+      <div class="time-slider-label">—</div>
+      <button class="time-slider-btn time-slider-now" type="button" aria-label="Hopp til nå">Nå</button>
+    </div>
+    <div class="time-slider-track-wrap">
+      <input type="range" class="time-slider-range" min="0" max="95" value="0" step="1" aria-label="Tidspunkt">
+      <div class="time-slider-now-marker" aria-hidden="true"></div>
+      <div class="time-slider-day-marker" aria-hidden="true"></div>
+    </div>
+    <div class="time-slider-ticks">
+      <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+    </div>
+  </div>
+
   <div id="bottom-sheet">
+    <div id="time-slider-mobile" class="time-slider-mobile hidden">
+      <div class="time-slider-top">
+        <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
+        <div class="time-slider-label">—</div>
+        <button class="time-slider-btn time-slider-now" type="button" aria-label="Hopp til nå">Nå</button>
+      </div>
+      <div class="time-slider-track-wrap">
+        <input type="range" class="time-slider-range" min="0" max="95" value="0" step="1" aria-label="Tidspunkt">
+        <div class="time-slider-now-marker" aria-hidden="true"></div>
+        <div class="time-slider-day-marker" aria-hidden="true"></div>
+      </div>
+      <div class="time-slider-ticks">
+        <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+      </div>
+    </div>
+
     <div class="sheet-handle-wrap" id="sheet-drag-zone">
       <div class="sheet-handle"></div>
     </div>
@@ -300,6 +455,10 @@
       currentSheetState = state;
       sheet.style.transition = animate ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none';
       sheet.style.transform = `translateY(${sheetSnapPoints[state]}px)`;
+
+      // Skjul mobil-slider ved 'full' (kartet er ikke synlig — slideren har ikke mening da)
+      const mobileSlider = document.getElementById('time-slider-mobile');
+      if (mobileSlider) mobileSlider.classList.toggle('full-hidden', state === 'full');
     }
 
     window.addEventListener('resize', initSheetGeometry);
@@ -495,6 +654,15 @@
     let overlayHandlersAttached = false; let initialFitDone = false;
     let spotPriceVisible = true; let flowsVisible = true; let flowsIsStale = false; let reservoirsVisible = true;
 
+    // Time-slider state
+    let timeAxis = [];          // Date[] — kanonisk tidsakse (lengste sone-serie)
+    let currentIndex = 0;       // hvilken 15-min-slot vises akkurat nå
+    let nowIndex = 0;           // hvor i timeAxis "nå" befinner seg
+    let userPinned = false;     // true når brukeren har dratt slideren bort fra "nå"
+    let isPlaying = false;
+    let playInterval = null;
+    const PLAY_SPEED_MS = 200;  // ~19 sek per døgn, ~38 sek for 2 døgn
+
     const zonePopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
     const flowPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
 
@@ -516,14 +684,39 @@
         const flows = flowsRes.ok ? await flowsRes.json() : null;
         reservoirsData = reservoirsRes.ok ? (await reservoirsRes.json()).areas : null;
 
+        // Bygg tidsakse fra dagens serie. Hvis vi har en tidsakse, dikteres
+        // sone-prisene av (currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
+        buildTimeAxis();
+        nowIndex = computeNowIndex();
+
+        let snapshot;
+        if (timeAxis.length > 0) {
+          if (!userPinned) {
+            currentIndex = nowIndex;
+          } else {
+            currentIndex = Math.min(currentIndex, timeAxis.length - 1);
+          }
+          snapshot = buildSnapshot(currentIndex);
+        } else {
+          // Ingen today-data — bruk /api/prices/current direkte
+          snapshot = prices;
+        }
+
+        // Populer initielle sone-properties slik at addOverlays() får riktig fyll
         for (const f of zones.features) {
-          const p = prices[f.properties.zoneName];
+          const p = snapshot[f.properties.zoneName];
           if (p && p.price_ore_kwh != null) {
-            f.properties.price_ore_kwh = p.price_ore_kwh; f.properties.price_eur_mwh = p.price_eur_mwh; f.properties.timestamp = p.timestamp;
+            f.properties.price_ore_kwh = p.price_ore_kwh;
+            f.properties.price_eur_mwh = p.price_eur_mwh;
+            f.properties.timestamp = p.timestamp;
           }
         }
-        renderMap(zones); renderTable(zones, prices); renderFlows(flows);
+        renderMap(zones); renderTable(snapshot); renderFlows(flows);
         if (mapLoaded) addReservoirLayer();
+
+        // Slider-synlighet og UI-oppdatering
+        toggleSliderVisibility(timeAxis.length > 0);
+        updateSliderUI();
       } catch (err) {
         document.getElementById('error').textContent = 'Venter på nettverk...'; console.error(err);
       }
@@ -642,14 +835,15 @@
       const f = e.features[0], p = f.properties;
       const accent = ZONE_COLORS[p.zoneName] || '#6b7280', region = ZONE_NAMES[p.zoneName] || '';
       const timeStr = p.timestamp ? new Date(p.timestamp).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' }) : '';
+      const atNow = (currentIndex === nowIndex);
       zonePopup.setLngLat(e.lngLat).setHTML(`
         <div class="popup-accent" style="background:${accent}"></div>
         <div class="popup-body">
           <div class="popup-region">${region}</div><div class="popup-zone">${p.zoneName}</div>
           <div class="popup-price" style="color:${priceColor(p.price_ore_kwh)}">${p.price_ore_kwh != null ? p.price_ore_kwh.toFixed(1) : '—'}<span class="unit">øre/kWh</span></div>
           ${p.price_eur_mwh != null ? `<div class="popup-subprice">${p.price_eur_mwh.toFixed(2)} EUR/MWh</div>` : ''}
-          ${renderSparkline(todayPrices[p.zoneName], accent)}
-          ${timeStr ? `<div class="popup-meta">${timeStr}</div>` : ''}
+          ${renderSparkline(todayPrices[p.zoneName], accent, timeAxis.length > 0 ? currentIndex : null)}
+          ${timeStr ? `<div class="popup-meta">${atNow ? 'Nå · ' : ''}${timeStr}</div>` : ''}
         </div>
       `).addTo(map);
     }
@@ -732,7 +926,7 @@
       setSheetState('peek');
     }
 
-    function renderSparkline(zoneSeries, accent) {
+    function renderSparkline(zoneSeries, accent, selectedIdx) {
       if (!zoneSeries || !zoneSeries.prices || zoneSeries.prices.length < 2) return '';
       const W = 200, H = 40, padX = 2, padY = 4, times = zoneSeries.prices.map(d => new Date(d.timestamp).getTime()), prices = zoneSeries.prices.map(d => d.price_ore_kwh);
       const tMin = times[0], tMax = times[times.length - 1], pMin = Math.min(...prices), pMax = Math.max(...prices);
@@ -741,14 +935,23 @@
       
       let line = ''; zoneSeries.prices.forEach((d, i) => { line += (i===0?'M':'L') + xOf(times[i]).toFixed(1) + ',' + yOf(prices[i]).toFixed(1) + ' '; });
       const bY = (H - padY).toFixed(1), area = line + `L${xOf(times[times.length-1]).toFixed(1)},${bY} L${xOf(times[0]).toFixed(1)},${bY} Z`;
-      return `<svg class="popup-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${area}" fill="${accent}" fill-opacity="0.18"/><path d="${line}" stroke="${accent}" stroke-width="1.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+
+      // Playhead: hvit vertikal linje + ring der slideren står
+      let playhead = '';
+      if (selectedIdx != null && selectedIdx >= 0 && selectedIdx < zoneSeries.prices.length) {
+        const px = xOf(times[selectedIdx]).toFixed(1);
+        const py = yOf(prices[selectedIdx]).toFixed(1);
+        playhead = `<line x1="${px}" y1="${padY}" x2="${px}" y2="${H-padY}" stroke="#ffffff" stroke-width="1" stroke-opacity="0.55"/><circle cx="${px}" cy="${py}" r="3" fill="#ffffff" stroke="${accent}" stroke-width="1.5"/>`;
+      }
+
+      return `<svg class="popup-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${area}" fill="${accent}" fill-opacity="0.18"/><path d="${line}" stroke="${accent}" stroke-width="1.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>${playhead}</svg>`;
     }
 
-    function renderTable(zones, prices) {
+    function renderTable(snapshot) {
       const generateRows = () => {
         let html = '';
         ['NO1', 'NO2', 'NO3', 'NO4', 'NO5'].forEach(z => {
-          const p = prices[z], priceOre = p?.price_ore_kwh != null ? p.price_ore_kwh : null, resInfo = reservoirsData ? reservoirsData[`NO_${z.slice(2)}`] : null;
+          const p = snapshot[z], priceOre = p?.price_ore_kwh != null ? p.price_ore_kwh : null, resInfo = reservoirsData ? reservoirsData[`NO_${z.slice(2)}`] : null;
           html += `<tr><td class="zone"><span class="swatch" style="background:${ZONE_COLORS[z]||'#6b7280'}"></span>${z}</td><td class="price" style="color:${priceColor(priceOre)}">${priceOre != null ? priceOre.toFixed(1) : '—'}<span class="unit">øre/kWh</span>${resInfo?.fill_percent != null ? `<div class="subprice">Magasin: ${resInfo.fill_percent.toFixed(1)} %</div>` : ''}</td></tr>`;
         });
         return html;
@@ -792,6 +995,201 @@
     bindToggle('spotpris', v => { spotPriceVisible = v; if (!v) zonePopup.remove(); });
     bindToggle('flyt', v => { flowsVisible = v; if (!v) flowPopup.remove(); });
     bindToggle('magasin', v => { reservoirsVisible = v; });
+
+    // ---------------------------------------------------------
+    // Time-slider: build axis, render at index, play/pause, snap-to-now
+    // ---------------------------------------------------------
+    function buildTimeAxis() {
+      // Bruk den lengste sone-serien som kanonisk akse.
+      // I praksis er alle 5 like fra ENTSO-E, men vi tar lengste for sikkerhets skyld.
+      let longest = [];
+      for (const zone of ['NO1', 'NO2', 'NO3', 'NO4', 'NO5']) {
+        const series = todayPrices[zone]?.prices;
+        if (series && series.length > longest.length) longest = series;
+      }
+      timeAxis = longest.map(d => new Date(d.timestamp));
+    }
+
+    function computeNowIndex() {
+      if (!timeAxis.length) return 0;
+      const now = Date.now();
+      // Samme mønster som backend: siste indeks der timestamp <= now
+      let idx = 0;
+      for (let i = 0; i < timeAxis.length; i++) {
+        if (timeAxis[i].getTime() <= now) idx = i;
+        else break;
+      }
+      return idx;
+    }
+
+    function buildSnapshot(idx) {
+      const snap = {};
+      for (const zone of ['NO1', 'NO2', 'NO3', 'NO4', 'NO5']) {
+        const series = todayPrices[zone]?.prices;
+        if (series && series[idx]) {
+          snap[zone] = {
+            price_ore_kwh: series[idx].price_ore_kwh,
+            price_eur_mwh: series[idx].price_eur_mwh,
+            timestamp: series[idx].timestamp,
+          };
+        } else {
+          snap[zone] = { price_ore_kwh: null, price_eur_mwh: null, timestamp: null };
+        }
+      }
+      return snap;
+    }
+
+    function renderAtIndex(idx) {
+      if (!timeAxis.length) return;
+      currentIndex = Math.max(0, Math.min(idx, timeAxis.length - 1));
+
+      const snapshot = buildSnapshot(currentIndex);
+
+      // Oppdater zone features og dytt nytt data til kilden — MapLibre re-tegner fyllene
+      if (zonesData) {
+        for (const f of zonesData.features) {
+          const p = snapshot[f.properties.zoneName];
+          if (p) {
+            f.properties.price_ore_kwh = p.price_ore_kwh;
+            f.properties.price_eur_mwh = p.price_eur_mwh;
+            f.properties.timestamp = p.timestamp;
+          }
+        }
+        const src = map.getSource('zones');
+        if (src) src.setData(zonesData);
+      }
+
+      renderTable(snapshot);
+      updateSliderUI();
+    }
+
+    function findDayBoundaryIndex() {
+      // Returnerer indeksen der vi krysser fra dag N til dag N+1, eller -1 hvis aksen er innen ett døgn
+      if (timeAxis.length < 2) return -1;
+      const firstDay = timeAxis[0].toDateString();
+      for (let i = 1; i < timeAxis.length; i++) {
+        if (timeAxis[i].toDateString() !== firstDay) return i;
+      }
+      return -1;
+    }
+
+    function formatTimeLabel() {
+      if (!timeAxis.length) return '—';
+      const t = timeAxis[currentIndex];
+      const now = new Date();
+      const tomorrow = new Date(now.getTime() + 86400000);
+      const timeStr = t.toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' });
+
+      let prefix;
+      if (currentIndex === nowIndex) {
+        prefix = '<span class="live-dot"></span>Nå';
+      } else if (t.toDateString() === now.toDateString()) {
+        prefix = 'I dag';
+      } else if (t.toDateString() === tomorrow.toDateString()) {
+        prefix = 'I morgen';
+      } else {
+        prefix = t.toLocaleDateString('no-NO', { weekday: 'short', day: 'numeric', month: 'short' });
+      }
+      return `${prefix} · ${timeStr}`;
+    }
+
+    function updateSliderUI() {
+      if (!timeAxis.length) return;
+      const maxIdx = timeAxis.length - 1;
+
+      // Tidslabel
+      const label = formatTimeLabel();
+      document.querySelectorAll('.time-slider-label').forEach(el => { el.innerHTML = label; });
+
+      // Range-input max + value
+      document.querySelectorAll('.time-slider-range').forEach(el => {
+        if (parseInt(el.max, 10) !== maxIdx) el.max = String(maxIdx);
+        if (parseInt(el.value, 10) !== currentIndex) el.value = String(currentIndex);
+      });
+
+      // "Nå"-markør på sliderspor
+      const nowPct = maxIdx > 0 ? (nowIndex / maxIdx) * 100 : 0;
+      document.querySelectorAll('.time-slider-now-marker').forEach(el => {
+        el.style.left = `${nowPct}%`;
+        el.classList.add('visible');
+      });
+
+      // Døgnskille-markør (kun synlig hvis vi har 2 døgn)
+      const boundaryIdx = findDayBoundaryIndex();
+      const boundaryPct = boundaryIdx > 0 ? (boundaryIdx / maxIdx) * 100 : 0;
+      document.querySelectorAll('.time-slider-day-marker').forEach(el => {
+        if (boundaryIdx > 0) {
+          el.style.left = `${boundaryPct}%`;
+          el.classList.add('visible');
+        } else {
+          el.classList.remove('visible');
+        }
+      });
+
+      // "Nå"-knapp dimmes når vi allerede er på nå
+      const atNow = (currentIndex === nowIndex);
+      document.querySelectorAll('.time-slider-now').forEach(el => {
+        el.classList.toggle('at-now', atNow);
+      });
+    }
+
+    function toggleSliderVisibility(visible) {
+      document.querySelectorAll('#time-slider-desktop, #time-slider-mobile').forEach(el => {
+        el.classList.toggle('hidden', !visible);
+      });
+    }
+
+    function startPlay() {
+      if (!timeAxis.length || isPlaying) return;
+      isPlaying = true;
+      document.querySelectorAll('.time-slider-play').forEach(el => { el.textContent = '⏸'; });
+      playInterval = setInterval(() => {
+        let next = currentIndex + 1;
+        if (next >= timeAxis.length) next = 0; // loop tilbake til start
+        userPinned = true;
+        renderAtIndex(next);
+      }, PLAY_SPEED_MS);
+    }
+
+    function pausePlay() {
+      if (!isPlaying) return;
+      isPlaying = false;
+      document.querySelectorAll('.time-slider-play').forEach(el => { el.textContent = '▶'; });
+      if (playInterval) { clearInterval(playInterval); playInterval = null; }
+    }
+
+    function togglePlay() { isPlaying ? pausePlay() : startPlay(); }
+
+    function snapToNow() {
+      pausePlay();
+      userPinned = false;
+      nowIndex = computeNowIndex();
+      renderAtIndex(nowIndex);
+    }
+
+    function setupSliderEvents() {
+      document.querySelectorAll('.time-slider-range').forEach(range => {
+        // 'pointerdown' pauser umiddelbart når brukeren griper slideren,
+        // selv før noen bevegelse skjer. Dekker både mus og touch.
+        range.addEventListener('pointerdown', () => {
+          pausePlay();
+          userPinned = true;
+        });
+        // 'input' fyrer kontinuerlig under drag (smooth animasjon)
+        range.addEventListener('input', (e) => {
+          userPinned = true;
+          renderAtIndex(parseInt(e.target.value, 10));
+        });
+      });
+      document.querySelectorAll('.time-slider-play').forEach(btn => {
+        btn.addEventListener('click', togglePlay);
+      });
+      document.querySelectorAll('.time-slider-now').forEach(btn => {
+        btn.addEventListener('click', snapToNow);
+      });
+    }
+
+    setupSliderEvents();
 
     loadData(); setInterval(loadData, 5 * 60 * 1000);
   </script>
