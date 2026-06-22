@@ -15,7 +15,7 @@ URL-er:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import flows, prices, zones, reservoirs
+from app.routers import flows, prices, zones, reservoirs, balance
 
 # Tillatte origins for CORS. Stramt definert i stedet for "*" 
 # fordi vi nå serverer frontend fra en annen origin (Pages) 
@@ -45,6 +45,7 @@ app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
 app.include_router(zones.router, prefix="/api/zones", tags=["zones"])
 app.include_router(flows.router, prefix="/api/flows", tags=["flows"])
 app.include_router(reservoirs.router, prefix="/api/reservoirs", tags=["reservoirs"])
+app.include_router(balance.router, prefix="/api/balance", tags=["balance"])
 
 
 @app.get("/api/health")
