@@ -93,8 +93,14 @@ CONNECTIONS = [
      "a_point":    [8.05, 58.13],   "b_point": [9.59, 56.49],
      "sea_points": [[8.70, 57.50]]},
     {"a": "NO_2", "b": "DE_LU", "kind": "external", "cable": "NordLink",
-     "a_point":    [6.71, 58.66],   "b_point": [9.38, 53.93],
-     "sea_points": [[6.50, 56.50]]},
+     "a_point":    [6.7525, 58.6676],   "b_point": [9.38, 53.93],
+     "sea_points": [
+         [6.7186, 58.6586],  # Fjord/kyst
+         [6.6649, 58.4266],  # Kyst/Nordsjøen
+         [6.6815, 58.2022],  # Ut i Nordsjøen
+         [7.6307, 54.9317],  # Midt-Nordsjøen
+         [8.7276, 53.9726]   # Tyskebukta/inn mot land
+     ]},
     {"a": "NO_2", "b": "GB", "kind": "external", "cable": "North Sea Link",
      "a_point":    [6.83, 59.49],   "b_point": [-1.51, 55.13],
      "sea_points": [
