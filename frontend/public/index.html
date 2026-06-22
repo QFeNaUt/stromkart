@@ -274,6 +274,45 @@
     .time-slider-ticks span:first-child { transform: translateX(0); text-align: left; }
     .time-slider-ticks span:last-child { transform: translateX(-100%); text-align: right; }
 
+    /* Minimer-knapp øverst til høyre på panelet (kun synlig når expanded) */
+    .time-slider-collapse {
+      position: absolute; top: 4px; right: 6px;
+      width: 22px; height: 22px; padding: 0;
+      background: transparent; color: var(--text-dim);
+      border: none; font-size: 16px; line-height: 1;
+      cursor: pointer; border-radius: 3px;
+      font-family: inherit;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 4;
+    }
+    .time-slider-collapse:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+
+    /* Kompakt collapsed-pille (kun synlig når collapsed) */
+    .time-slider-expand {
+      display: none;
+      align-items: center; gap: 10px;
+      width: 100%; padding: 4px 6px;
+      background: transparent; border: none;
+      color: var(--text); font-family: inherit;
+      font-size: 13px; font-variant-numeric: tabular-nums;
+      cursor: pointer; border-radius: 4px;
+      letter-spacing: 0.2px;
+    }
+    .time-slider-expand:hover { background: rgba(255, 255, 255, 0.05); }
+    .time-slider-expand .collapsed-time-label { flex: 1; text-align: center; }
+    .time-slider-expand .chevron { color: var(--text-dim); font-size: 14px; line-height: 1; }
+
+    /* Collapsed-state: skjul full UI, vis kompakt pille */
+    .time-slider-wrap.collapsed .time-slider-collapse,
+    .time-slider-wrap.collapsed .time-slider-top,
+    .time-slider-wrap.collapsed .time-slider-track-wrap,
+    .time-slider-wrap.collapsed .time-slider-ticks { display: none; }
+    .time-slider-wrap.collapsed .time-slider-expand { display: flex; }
+    .time-slider-wrap.collapsed {
+      padding: 4px 8px;
+      width: auto; min-width: 180px;
+    }
+
     /* Mobil: skjul desktop, vis mobilversjon inne i sheetet */
     .time-slider-mobile { display: none; }
     @media (max-width: 768px) {
@@ -284,7 +323,7 @@
         bottom: 100%;  /* sitter rett over sheetets toppkant, følger sheet-transformen */
         left: 12px; right: 12px;
         margin-bottom: 8px;
-        padding: 10px 14px 8px;
+        padding: 4px 12px 4px;  /* ~25% lavere — trimmet topp/bunn */
         background: var(--panel);
         backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
         border: 1px solid var(--border); border-radius: 12px;
@@ -296,14 +335,26 @@
         opacity: 0; pointer-events: none;
       }
       .time-slider-mobile.hidden { display: none; }
-      .time-slider-mobile .time-slider-top { margin-bottom: 8px; gap: 10px; }
+      /* Mobil-trimming: tettere top-row, lavere knapper, mindre marginer */
+      .time-slider-mobile .time-slider-top { margin-bottom: 4px; gap: 10px; }
       .time-slider-mobile .time-slider-label { font-size: 12.5px; }
       .time-slider-mobile .time-slider-range { height: 6px; }
       .time-slider-mobile .time-slider-range::-webkit-slider-thumb { width: 22px; height: 22px; }
       .time-slider-mobile .time-slider-range::-moz-range-thumb { width: 22px; height: 22px; }
       .time-slider-mobile .time-slider-btn {
-        padding: 7px 12px; font-size: 13px; min-height: 34px;  /* touch target */
+        padding: 4px 10px; font-size: 12.5px; min-height: 28px;
       }
+      .time-slider-mobile .time-slider-ticks { margin-top: 2px; }
+      .time-slider-mobile .time-slider-collapse {
+        top: 2px; right: 4px; width: 26px; height: 26px; font-size: 17px;
+      }
+      .time-slider-mobile.collapsed {
+        left: 50%; right: auto;
+        transform: translateX(-50%);
+        min-width: 180px; width: auto;
+        padding: 2px 8px;
+      }
+      .time-slider-mobile.collapsed .time-slider-expand { padding: 6px 8px; }
     }
   </style>
 </head>
@@ -335,6 +386,7 @@
   </div>
 
   <div id="time-slider-desktop" class="panel time-slider-wrap hidden">
+    <button class="time-slider-collapse" type="button" aria-label="Minimer tidslinje">⌄</button>
     <div class="time-slider-top">
       <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
       <div class="time-slider-label">—</div>
@@ -348,10 +400,15 @@
     <div class="time-slider-ticks">
       <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
     </div>
+    <button class="time-slider-expand" type="button" aria-label="Vis tidslinje">
+      <span class="collapsed-time-label">—</span>
+      <span class="chevron" aria-hidden="true">⌃</span>
+    </button>
   </div>
 
   <div id="bottom-sheet">
-    <div id="time-slider-mobile" class="time-slider-mobile hidden">
+    <div id="time-slider-mobile" class="time-slider-mobile time-slider-wrap hidden">
+      <button class="time-slider-collapse" type="button" aria-label="Minimer tidslinje">⌄</button>
       <div class="time-slider-top">
         <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
         <div class="time-slider-label">—</div>
@@ -365,6 +422,10 @@
       <div class="time-slider-ticks">
         <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
       </div>
+      <button class="time-slider-expand" type="button" aria-label="Vis tidslinje">
+        <span class="collapsed-time-label">—</span>
+        <span class="chevron" aria-hidden="true">⌃</span>
+      </button>
     </div>
 
     <div class="sheet-handle-wrap" id="sheet-drag-zone">
@@ -414,7 +475,7 @@
       zoom: 3.8,
       attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }), 'top-right');
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-right');
 
     let mapLoaded = false;
@@ -661,6 +722,7 @@
     let userPinned = false;     // true når brukeren har dratt slideren bort fra "nå"
     let isPlaying = false;
     let playInterval = null;
+    let sliderCollapsed = false; // minimert tidslinje (sesjons-state, ikke persistent)
     const PLAY_SPEED_MS = 200;  // ~19 sek per døgn, ~38 sek for 2 døgn
 
     const zonePopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
@@ -1097,9 +1159,9 @@
       if (!timeAxis.length) return;
       const maxIdx = timeAxis.length - 1;
 
-      // Tidslabel
+      // Tidslabel (både i full UI og kompakt pille)
       const label = formatTimeLabel();
-      document.querySelectorAll('.time-slider-label').forEach(el => { el.innerHTML = label; });
+      document.querySelectorAll('.time-slider-label, .collapsed-time-label').forEach(el => { el.innerHTML = label; });
 
       // Range-input max + value
       document.querySelectorAll('.time-slider-range').forEach(el => {
@@ -1137,6 +1199,15 @@
       document.querySelectorAll('#time-slider-desktop, #time-slider-mobile').forEach(el => {
         el.classList.toggle('hidden', !visible);
       });
+    }
+
+    function toggleSliderCollapse() {
+      sliderCollapsed = !sliderCollapsed;
+      document.querySelectorAll('#time-slider-desktop, #time-slider-mobile').forEach(el => {
+        el.classList.toggle('collapsed', sliderCollapsed);
+      });
+      // Pause auto-play når brukeren minimerer (ellers ville den fortsatt usynlig animere)
+      if (sliderCollapsed) pausePlay();
     }
 
     function startPlay() {
@@ -1186,6 +1257,11 @@
       });
       document.querySelectorAll('.time-slider-now').forEach(btn => {
         btn.addEventListener('click', snapToNow);
+      });
+      // Minimer/maksimer: separate knapper med ulike ARIA-labels,
+      // men begge toggler samme state.
+      document.querySelectorAll('.time-slider-collapse, .time-slider-expand').forEach(btn => {
+        btn.addEventListener('click', toggleSliderCollapse);
       });
     }
 
