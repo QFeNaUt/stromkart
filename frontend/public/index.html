@@ -504,6 +504,156 @@
       }
       .time-slider-mobile.collapsed .time-slider-expand { padding: 6px 8px; }
     }
+
+    /* ---------- Forklaringslag (hjelp + ordliste) --------- */
+    /* Liten "i"-knapp ved begreper i panelene */
+    .info-badge {
+      flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%;
+      border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+      font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: Georgia, "Times New Roman", serif; font-style: italic;
+      transition: color 120ms ease, border-color 120ms ease;
+      vertical-align: middle;
+    }
+    .info-badge:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Toggle-rad: checkbox-label til venstre, "i"-knapp til høyre */
+    .toggle-row { display: flex; align-items: center; gap: 4px; }
+    .toggle-row .layer-toggle { flex: 1; }
+
+    /* "Slik leser du kartet"-knapp i panelene */
+    .help-trigger {
+      display: flex; align-items: center; gap: 7px; width: 100%;
+      background: transparent; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); font-family: inherit; font-size: 12px;
+      padding: 7px 10px; cursor: pointer; text-align: left;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    .help-trigger:hover { background: rgba(255,255,255,0.05); border-color: var(--accent); }
+    .help-trigger .q {
+      flex-shrink: 0; width: 17px; height: 17px; border-radius: 50%;
+      border: 1px solid var(--accent); color: var(--accent);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+    }
+    #controls .help-trigger { margin-top: 8px; }
+
+    /* Overlay / modal */
+    #help-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(1, 4, 9, 0.66); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 24px 16px; overflow-y: auto;
+    }
+    #help-overlay.open { display: flex; }
+    .help-modal {
+      background: var(--panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      width: 100%; max-width: 520px; margin: auto;
+      padding: 0; overflow: hidden;
+    }
+    .help-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--panel); z-index: 1;
+    }
+    .help-head h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: 0.2px; }
+    .help-close {
+      flex-shrink: 0; width: 30px; height: 30px; border-radius: 6px;
+      background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+      font-size: 18px; line-height: 1; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .help-close:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+    .help-body { padding: 18px 20px 22px; }
+    .help-intro { font-size: 13px; color: var(--text-dim); margin: 0 0 18px; line-height: 1.5; }
+    .help-subhead {
+      font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase;
+      color: var(--text-dim); margin: 22px 0 12px;
+    }
+    .help-subhead:first-of-type { margin-top: 0; }
+
+    /* Del A — visuell nøkkel */
+    .key-item {
+      display: flex; gap: 12px; align-items: flex-start;
+      width: 100%; text-align: left;
+      background: transparent; border: none; border-radius: 6px;
+      color: var(--text); font-family: inherit; padding: 9px 8px;
+      cursor: pointer; transition: background 120ms ease;
+    }
+    .key-item:hover { background: rgba(255,255,255,0.05); }
+    .key-item[disabled] { cursor: default; }
+    .key-item[disabled]:hover { background: transparent; }
+    .key-swatch {
+      flex-shrink: 0; width: 30px; height: 30px; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .key-text .key-label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 2px; }
+    .key-text .key-desc { display: block; font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+    .key-dots { display: inline-flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+    .key-dots .d { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-dim); }
+    .key-dots .d i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+    /* Swatch-grafikk */
+    .sw-grad { width: 30px; height: 12px; border-radius: 2px;
+      background: linear-gradient(to right, var(--c-low), var(--c-mid) 40%, var(--c-high) 70%, var(--c-vhigh)); }
+    .sw-zones { width: 26px; height: 18px; border-radius: 3px; border: 2px solid var(--zone-no3); background: rgba(160,124,232,0.12); }
+    .sw-arrow { color: #f97316; font-size: 20px; line-height: 1; transform: translateY(-1px); }
+    .sw-battery {
+      width: 16px; height: 24px; border: 1.5px solid var(--text-dim); border-radius: 2px;
+      position: relative; display: flex; align-items: flex-end; padding: 1.5px;
+    }
+    .sw-battery::before { content: ""; position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+      width: 7px; height: 3px; background: var(--text-dim); border-radius: 1px 1px 0 0; }
+    .sw-battery span { display: block; width: 100%; height: 62%; background: #3b82f6; border-radius: 1px; }
+    .sw-flag { width: 20px; height: 14px; border-radius: 2px; overflow: hidden; display: flex; flex-direction: column; }
+    .sw-flag i { display: block; }
+    .sw-slider { width: 28px; height: 4px; background: #21262d; border-radius: 2px; position: relative; }
+    .sw-slider::after { content: ""; position: absolute; top: 50%; left: 60%; transform: translate(-50%,-50%);
+      width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+    .sw-tap {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 1.5px solid var(--text); position: relative;
+    }
+    .sw-tap::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--text); }
+    .sw-warn {
+      width: 20px; height: 18px; display: flex; align-items: center; justify-content: center;
+      color: #f59e0b; font-size: 15px;
+    }
+
+    /* Del B — ordliste */
+    .gloss {
+      border: 1px solid var(--border); border-radius: 7px;
+      margin-bottom: 8px; overflow: hidden; background: rgba(255,255,255,0.015);
+    }
+    .gloss > summary {
+      list-style: none; cursor: pointer; padding: 11px 14px;
+      font-size: 13.5px; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      transition: background 120ms ease;
+    }
+    .gloss > summary::-webkit-details-marker { display: none; }
+    .gloss > summary:hover { background: rgba(255,255,255,0.04); }
+    .gloss > summary::after {
+      content: "+"; color: var(--text-dim); font-size: 16px; font-weight: 400;
+      flex-shrink: 0; transition: transform 150ms ease;
+    }
+    .gloss[open] > summary::after { content: "−"; }
+    .gloss[open] > summary { border-bottom: 1px solid var(--border); }
+    .gloss .gloss-body {
+      padding: 12px 14px 14px; font-size: 13px; color: var(--text-dim); line-height: 1.55;
+    }
+    .gloss.flash { box-shadow: 0 0 0 1px var(--accent); border-color: var(--accent); }
+
+    @media (max-width: 768px) {
+      #help-overlay { padding: 0; }
+      .help-modal { max-width: none; min-height: 100%; border-radius: 0; margin: 0; }
+      .help-head { padding-top: max(18px, env(safe-area-inset-top)); }
+    }
   </style>
 </head>
 
@@ -545,7 +695,7 @@
   </div>
 
   <div id="legend" class="panel">
-    <div class="subtitle" style="margin-bottom: 8px;">Spotpris (øre/kWh)</div>
+    <div class="subtitle" style="margin-bottom: 8px;">Spotpris (øre/kWh) <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button></div>
     <div class="legend-bar"></div>
     <div class="legend-labels"><span>0</span><span>50</span><span>100</span><span>150+</span></div>
     <div class="legend-note">Spotpris eks. mva og avgifter</div>
@@ -553,10 +703,24 @@
 
   <div id="controls" class="panel">
     <div class="subtitle">Lag</div>
-    <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris" checked> <span>Spotpris</span></label>
-    <label class="layer-toggle"><input type="checkbox" id="toggle-flyt" checked> <span>Kraftflyt</span></label>
-    <label class="layer-toggle"><input type="checkbox" id="toggle-magasin" checked> <span>Magasinfylling</span></label>
-    <label class="layer-toggle"><input type="checkbox" id="toggle-balance" checked> <span>Forbruk og produksjon</span></label>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris" checked> <span>Spotpris</span></label>
+      <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button>
+    </div>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-flyt" checked> <span>Kraftflyt</span></label>
+      <button class="info-badge" type="button" data-concept="kraftflyt" aria-label="Forklar kraftflyt">i</button>
+    </div>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-magasin" checked> <span>Magasinfylling</span></label>
+      <button class="info-badge" type="button" data-concept="magasinfylling" aria-label="Forklar magasinfylling">i</button>
+    </div>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-balance" checked> <span>Forbruk og produksjon</span></label>
+    </div>
+    <button class="help-trigger" type="button" data-help-open>
+      <span class="q">?</span><span>Slik leser du kartet</span>
+    </button>
   </div>
 
   <div id="time-slider-desktop" class="panel time-slider-wrap hidden">
@@ -611,6 +775,12 @@
         <div id="sheet-context-desc">Velg et område i kartet, eller dra opp</div>
       </div>
 
+      <div class="sheet-section">
+        <button class="help-trigger" type="button" data-help-open>
+          <span class="q">?</span><span>Slik leser du kartet</span>
+        </button>
+      </div>
+
       <div class="sheet-section balance-section hidden" id="sheet-balance">
         <div class="balance-stale-banner">⚠ Bufret data</div>
         <div class="subtitle">Forbruk og produksjon</div>
@@ -642,16 +812,46 @@
 
       <div class="sheet-section">
         <div class="subtitle">Kartlag</div>
-        <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris-m" checked> <span>Spotpris</span></label>
-        <label class="layer-toggle"><input type="checkbox" id="toggle-flyt-m" checked> <span>Kraftflyt</span></label>
-        <label class="layer-toggle"><input type="checkbox" id="toggle-magasin-m" checked> <span>Magasinfylling</span></label>
-        <label class="layer-toggle"><input type="checkbox" id="toggle-balance-m" checked> <span>Forbruk og produksjon</span></label>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris-m" checked> <span>Spotpris</span></label>
+          <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button>
+        </div>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-flyt-m" checked> <span>Kraftflyt</span></label>
+          <button class="info-badge" type="button" data-concept="kraftflyt" aria-label="Forklar kraftflyt">i</button>
+        </div>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-magasin-m" checked> <span>Magasinfylling</span></label>
+          <button class="info-badge" type="button" data-concept="magasinfylling" aria-label="Forklar magasinfylling">i</button>
+        </div>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-balance-m" checked> <span>Forbruk og produksjon</span></label>
+        </div>
       </div>
 
       <div class="sheet-section">
         <div class="subtitle">Fargeskala (øre/kWh)</div>
         <div class="legend-bar"></div>
         <div class="legend-labels"><span>0</span><span>50</span><span>100</span><span>150+</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forklaringslag: «Slik leser du kartet» + ordliste -->
+  <div id="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-hidden="true">
+    <div class="help-modal" role="document">
+      <div class="help-head">
+        <h2 id="help-title">Slik leser du kartet</h2>
+        <button class="help-close" type="button" data-help-close aria-label="Lukk">✕</button>
+      </div>
+      <div class="help-body">
+        <p class="help-intro">Kartet viser hva strøm koster i engrosmarkedet akkurat nå, hvor den flyter, og hvor mye vann vi har spart i magasinene. Trykk på et punkt under for en kort forklaring.</p>
+
+        <div class="help-subhead">Tegnforklaring</div>
+        <div id="help-key"></div>
+
+        <div class="help-subhead">Ordliste</div>
+        <div id="help-glossary"></div>
       </div>
     </div>
   </div>
@@ -796,7 +996,7 @@
       return '#dc2626';
     }
 
-    const FLOW_COLORS = { export: '#f97316', import: '#06b6d4', internal: '#9ca3af' };
+    const FLOW_COLORS = { export: '#f97316', import: '#06b6d4', internal: '#9b91b8' };
     const FLOW_WIDTH = [
       'interpolate', ['linear'], ['coalesce', ['get', 'mw'], 0],
       0, 1.0, 50, 1.5, 400, 3.0, 1000, 5.0, 1400, 6.5,
@@ -1788,6 +1988,172 @@
     }
 
     setupSliderEvents();
+
+    // ---------------------------------------------------------
+    // Forklaringslag: «Slik leser du kartet» + ordliste
+    // ---------------------------------------------------------
+    // Ett kuratert faktasett — kilde for både inline «i»-knapper,
+    // tegnforklaringen (Del A) og ordlista (Del B).
+    const CONCEPT_ORDER = ['spotpris', 'prissone', 'kraftflyt', 'hvdc', 'magasinfylling', 'mtu', 'ore_kwh', 'eks_mva'];
+    const CONCEPTS = {
+      spotpris: {
+        label: 'Spotpris',
+        body: 'Strømmens råvarepris. Den fastsettes på den nordiske kraftbørsen Nord Pool dagen i forveien og endres gjennom døgnet. Dette er prisen før nettleie, avgifter, mva og strømstøtte er lagt til – så den er alltid lavere enn det du faktisk betaler på strømregningen din.'
+      },
+      prissone: {
+        label: 'Prissone (NO1–NO5)',
+        body: 'Norge er delt i fem prisområder fordi strømnettet har begrenset kapasitet til å flytte kraft mellom landsdeler. Når en flaskehals hindrer transport, kan prisen bli ulik på hver side — derfor kan naboer i to soner betale helt forskjellig.'
+      },
+      kraftflyt: {
+        label: 'Kraftflyt',
+        body: 'Strømmen flyter fysisk mellom landsdeler og over landegrensene. Pilene på kartet viser hvilken vei strømmen går akkurat nå, og tykkelsen viser hvor mye energi som overføres. Strømmen søker seg automatisk fra områder med lav pris til områder med høy pris. Når en forbindelse når maks kapasitet, stopper denne utjevningen, og prisforskjellen mellom områdene blir stående.'
+      },
+      hvdc: {
+        label: 'HVDC',
+        body: '«Høyspent likestrøm» (high-voltage direct current): teknologien i de lange sjøkablene som knytter Norge til utlandet — NordLink til Tyskland, NorNed til Nederland, North Sea Link til Storbritannia og Skagerrak til Danmark. Over så lange avstander under vann taper likestrøm mindre energi enn vekselstrøm. Disse kablene er en viktig grunn til at prisen i Sør-Norge henger sammen med været på kontinentet.'
+      },
+      magasinfylling: {
+        label: 'Magasinfylling',
+        body: 'Hvor mye vann som er lagret i vannkraftmagasinene, målt i prosent av full kapasitet. I et vannkraftland som Norge er lagret vann det samme som lagret strøm – det er batteriet vårt. Fyllingsgraden endrer seg med årstidene: magasinene fylles opp av regn og smeltet snø om våren og sommeren, og tømmes gjennom vinteren. Derfor sier prosenten lite alene – 50 % fylling kan være kritisk lavt i november, men helt normalt i mai. Appen sammenligner derfor alltid dagens nivå med hva som er historisk normalt for akkurat denne uken.'
+      },
+      mtu: {
+        label: 'MTU',
+        body: '«Market Time Unit», tidsoppløsningen prisene settes i. Fra 2025 settes nordiske strømpriser i 15-minutters intervaller i stedet for hele timer — altså 96 priser i døgnet. Finere oppløsning betyr at prisen kan svinge raskere og fange opp kortere topper og bunner gjennom dagen.'
+      },
+      ore_kwh: {
+        label: 'øre/kWh',
+        body: 'Enheten du kjenner fra strømregninga: øre per kilowattime. Kraftbørsen oppgir prisen i euro per megawattime (EUR/MWh), så kartet regner det om ved å gange med dagens eurokurs fra Norges Bank og dele på 10. En kilowattime er omtrent det en vaskemaskin bruker på én vask — en håndgripelig enhet for hverdagsforbruk.'
+      },
+      eks_mva: {
+        label: 'Eks. mva og avgifter',
+        body: 'Tallene på kartet er ren spotpris — selve råvaren — uten det som kommer i tillegg på regninga: nettleie, elavgift, mva og eventuelt påslag fra strømleverandøren. Strømstøtte trekker derimot ned. Kartet viser markedet, ikke sluttsummen du betaler — så ikke les tallene her som «hva strømmen koster meg».'
+      }
+    };
+
+    // Del A — tegnforklaring. Hver rad kan peke til et begrep i ordlista.
+    const KEY_ITEMS = [
+      {
+        concept: 'spotpris', swatch: '<div class="sw-grad"></div>',
+        label: 'Sonefarge',
+        desc: 'Fargen i hver sone viser spotprisnivået — grønn (lav) til rød (høy), i øre/kWh.'
+      },
+      {
+        concept: 'prissone', swatch: '<div class="sw-zones"></div>',
+        label: 'Sonegrenser (prissoner)',
+        desc: 'Hvert prisområde har sin egen unike kantfarge. Det gjør det lett å se hvor grensene går mellom de fem norske prissonene (NO1–NO5) og våre naboland.'
+      },
+      {
+        concept: 'kraftflyt', swatch: '<div class="sw-arrow">➜</div>',
+        label: 'Piler (kraftflyt)',
+        desc: 'Viser strømmen som flyttes akkurat nå. Pilens retning viser veien strømmen går, og tykkelsen viser hvor store mengder som overføres.',
+        dots: true
+      },
+      {
+        concept: 'magasinfylling', swatch: '<div class="sw-battery"><span></span></div>',
+        label: 'Batteri-ikoner (magasinfylling)',
+        desc: 'Vises som batterier for å illustrere sonens lagrede energi. Høyden på det blå feltet viser hvor fulle magasinene er i prosent. De er bevisst farget nøytralt blå – i stedet for rød, gul eller grønn – fordi et lavt nivå om våren kan være like normalt som et høyt nivå om høsten.'
+      },
+      {
+        concept: 'hvdc', swatch: '<div class="sw-flag"><i style="height:50%;background:#cf2e2e"></i><i style="height:50%;background:#3b6fb0"></i></div>',
+        label: 'Flagg ved kabler',
+        desc: 'Et flagg viser hvilket land en utenlandskabel går til. Trykk for mer om sjøkablene (HVDC).'
+      },
+      {
+        concept: 'mtu', swatch: '<div class="sw-slider"></div>',
+        label: 'Tidslinje',
+        desc: 'Spol gjennom det siste døgnet og morgendagens prognose, i 15-minutters steg.'
+      },
+      {
+        concept: null, swatch: '<div class="sw-tap"></div>',
+        label: 'Trykk for detaljer',
+        desc: 'Sone → forbruk og produksjon. Batteri → magasindetalj. Pil → kraftflyt.'
+      },
+      {
+        concept: null, swatch: '<div class="sw-warn">⚠</div>',
+        label: 'Bufret data',
+        desc: 'Dempede farger og et gult «⚠ Bufret data»-merke betyr at vi viser sist kjente verdi mens ny data hentes.'
+      }
+    ];
+
+    const helpOverlay = document.getElementById('help-overlay');
+
+    function buildKey() {
+      const flowDots = `<div class="key-dots">`
+        + `<span class="d"><i style="background:${FLOW_COLORS.export}"></i>Eksport</span>`
+        + `<span class="d"><i style="background:${FLOW_COLORS.import}"></i>Import</span>`
+        + `<span class="d"><i style="background:${FLOW_COLORS.internal}"></i>Internt</span>`
+        + `</div>`;
+      const html = KEY_ITEMS.map(it => {
+        const attrs = it.concept ? `data-concept="${it.concept}"` : 'disabled';
+        const dots = it.dots ? flowDots : '';
+        return `<button class="key-item" type="button" ${attrs}>`
+          + `<span class="key-swatch">${it.swatch}</span>`
+          + `<span class="key-text"><span class="key-label">${it.label}</span>`
+          + `<span class="key-desc">${it.desc}</span>${dots}</span>`
+          + `</button>`;
+      }).join('');
+      document.getElementById('help-key').innerHTML = html;
+    }
+
+    function buildGlossary() {
+      const html = CONCEPT_ORDER.map(key => {
+        const c = CONCEPTS[key];
+        return `<details class="gloss" id="gloss-${key}">`
+          + `<summary>${c.label}</summary>`
+          + `<div class="gloss-body">${c.body}</div>`
+          + `</details>`;
+      }).join('');
+      document.getElementById('help-glossary').innerHTML = html;
+    }
+
+    function openHelp(focusKey) {
+      helpOverlay.classList.add('open');
+      helpOverlay.setAttribute('aria-hidden', 'false');
+      if (focusKey && CONCEPTS[focusKey]) {
+        helpOverlay.querySelectorAll('.gloss').forEach(d => { d.open = (d.id === `gloss-${focusKey}`); });
+        const target = document.getElementById(`gloss-${focusKey}`);
+        if (target) {
+          target.classList.add('flash');
+          setTimeout(() => target.classList.remove('flash'), 1400);
+          requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        }
+      }
+      const closeBtn = helpOverlay.querySelector('.help-close');
+      if (closeBtn) closeBtn.focus();
+    }
+
+    function closeHelp() {
+      helpOverlay.classList.remove('open');
+      helpOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    // Auto-visning kun første besøk; knappen er alltid tilgjengelig etterpå.
+    const HELP_SEEN_KEY = 'stromkart_help_seen_v1';
+    function maybeAutoOpenHelp() {
+      let seen = false;
+      try { seen = localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (e) {}
+      if (seen) return;
+      try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e) {}
+      setTimeout(() => openHelp(), 700);
+    }
+
+    document.addEventListener('click', (e) => {
+      const badge = e.target.closest('[data-concept]');
+      if (badge) { e.preventDefault(); openHelp(badge.getAttribute('data-concept')); return; }
+      if (e.target.closest('[data-help-open]')) { openHelp(); return; }
+      if (e.target.closest('[data-help-close]')) { closeHelp(); return; }
+      if (e.target === helpOverlay) { closeHelp(); } // klikk på bakteppe
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && helpOverlay.classList.contains('open')) closeHelp();
+    });
+
+    function initHelp() {
+      buildKey();
+      buildGlossary();
+      maybeAutoOpenHelp();
+    }
+    initHelp();
 
     loadData(); setInterval(loadData, 5 * 60 * 1000);
   </script>
