@@ -96,6 +96,12 @@
       margin: 0 0 4px 0; font-size: 15px; font-weight: 600; letter-spacing: 0.2px;
     }
     #desktop-balance .balance-subtitle { margin-bottom: 12px; }
+    #desktop-reservoir { min-width: 280px; }
+    #desktop-reservoir.hidden { display: none; }
+    #desktop-reservoir .reservoir-title {
+      margin: 0 0 4px 0; font-size: 15px; font-weight: 600; letter-spacing: 0.2px;
+    }
+    #desktop-reservoir .reservoir-subtitle { margin-bottom: 12px; }
     #legend { bottom: 16px; left: 16px; min-width: 220px; }
     #controls { top: 96px; right: 16px; padding: 8px 10px; min-width: 160px; }
     #controls .subtitle { margin-bottom: 6px; }
@@ -242,6 +248,84 @@
     .balance-detail .row .pct { color: var(--text-dim); min-width: 42px; text-align: right; }
     .balance-meta {
       margin-top: 10px; font-size: 11px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Reservoir-panel (magasinfylling) ---------- */
+    .reservoir-section { /* arver .sheet-section */ }
+    .reservoir-section.hidden { display: none; }
+    .reservoir-stale-banner {
+      display: none; margin-bottom: 8px; padding: 6px 10px;
+      background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 6px; font-size: 12px; color: #fbbf24;
+    }
+    .reservoir-stale-banner.visible { display: block; }
+    .reservoir-back {
+      background: none; border: none; color: var(--accent);
+      font: inherit; font-size: 12.5px; padding: 0;
+      margin: 0 0 10px 0; cursor: pointer; text-align: left;
+      display: inline-block;
+    }
+    .reservoir-back:hover { text-decoration: underline; }
+    .reservoir-headline {
+      display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px;
+      margin: 6px 0 4px 0;
+    }
+    .reservoir-headline .pct {
+      font-size: 22px; font-weight: 600; color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .reservoir-headline .delta {
+      font-size: 12px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+    .reservoir-headline .delta.pos { color: #22c55e; }
+    .reservoir-headline .delta.neg { color: #f97316; }
+    .reservoir-envelope {
+      position: relative; height: 22px; margin: 14px 0 4px 0;
+    }
+    .reservoir-envelope .track {
+      position: absolute; top: 10px; left: 0; right: 0; height: 4px;
+      background: rgba(255,255,255,0.10); border-radius: 2px;
+    }
+    .reservoir-envelope .median-tick {
+      position: absolute; top: 6px; width: 2px; height: 12px;
+      background: rgba(255,255,255,0.55); transform: translateX(-1px);
+    }
+    .reservoir-envelope .now-marker {
+      position: absolute; top: 5px; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--accent);
+      border: 2px solid var(--bg); transform: translateX(-50%);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .reservoir-envelope-meta {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums; margin-top: 4px;
+    }
+    .reservoir-envelope-meta .end-median { color: var(--text-dim); }
+    .reservoir-top-title {
+      margin-top: 16px; margin-bottom: 8px;
+      font-size: 11px; letter-spacing: 0.6px;
+      text-transform: uppercase; color: var(--text-dim);
+    }
+    .reservoir-top-list { display: flex; flex-direction: column; gap: 9px; }
+    .reservoir-top-list .item .row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 8px; font-size: 13px;
+    }
+    .reservoir-top-list .item .name { color: var(--text); font-weight: 500; }
+    .reservoir-top-list .item .volume {
+      color: var(--text-dim); font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .reservoir-top-list .item .note {
+      font-size: 11.5px; color: var(--text-dim); margin-top: 1px;
+    }
+    .reservoir-meta {
+      margin-top: 14px; padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      font-size: 11px; color: var(--text-dim);
       font-variant-numeric: tabular-nums;
     }
 
@@ -445,6 +529,19 @@
       <div class="balance-detail"></div>
       <div class="balance-meta"></div>
     </div>
+
+    <div id="desktop-reservoir" class="panel reservoir-section hidden">
+      <div class="reservoir-stale-banner">⚠ Bufret data</div>
+      <button class="reservoir-back" type="button">← Se forbruk og produksjon</button>
+      <h1 class="reservoir-title">Magasinfylling</h1>
+      <div class="reservoir-subtitle subtitle">—</div>
+      <div class="reservoir-headline"></div>
+      <div class="reservoir-envelope"></div>
+      <div class="reservoir-envelope-meta"></div>
+      <div class="reservoir-top-title">Største magasin</div>
+      <div class="reservoir-top-list"></div>
+      <div class="reservoir-meta"></div>
+    </div>
   </div>
 
   <div id="legend" class="panel">
@@ -521,6 +618,19 @@
         <div class="balance-bar"></div>
         <div class="balance-detail"></div>
         <div class="balance-meta"></div>
+      </div>
+
+      <div class="sheet-section reservoir-section hidden" id="sheet-reservoir">
+        <div class="reservoir-stale-banner">⚠ Bufret data</div>
+        <button class="reservoir-back" type="button">← Se forbruk og produksjon</button>
+        <div class="subtitle">Magasinfylling</div>
+        <div class="reservoir-subtitle subtitle" style="margin-top: -8px;">—</div>
+        <div class="reservoir-headline"></div>
+        <div class="reservoir-envelope"></div>
+        <div class="reservoir-envelope-meta"></div>
+        <div class="reservoir-top-title">Største magasin</div>
+        <div class="reservoir-top-list"></div>
+        <div class="reservoir-meta"></div>
       </div>
 
       <div class="sheet-section">
@@ -802,6 +912,7 @@
     let overlayHandlersAttached = false; let initialFitDone = false;
     let spotPriceVisible = true; let flowsVisible = true; let flowsIsStale = false; let reservoirsVisible = true; let balanceVisible = true;
     let selectedZone = null; // hvilken sone som er aktiv i sheet-konteksten (for re-render av balance)
+    let selectedView = null; // 'balance' | 'reservoir' | null — hvilket detaljpanel som vises for selectedZone
 
     // Time-slider state
     let timeAxis = [];          // Date[] — kanonisk tidsakse (lengste sone-serie)
@@ -911,7 +1022,10 @@
       if (flowsData) addFlowLayers();
       if (reservoirsData) addReservoirLayer();
       updateOverlayVisibility();
-      if (selectedZone) renderBalanceSection(selectedZone);
+      if (selectedZone) {
+        renderBalanceSection(selectedZone);
+        renderReservoirSection(selectedZone);
+      }
 
       if (!overlayHandlersAttached) {
         // Desktop Hover
@@ -1050,7 +1164,9 @@
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], zone]);
         map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
         selectedZone = zoneKey;
+        selectedView = 'balance';
         renderBalanceSection(zoneKey);
+        renderReservoirSection(zoneKey);
       } 
       else if (f.layer.id.startsWith('flows-')) {
         const dirLbl = { export: 'Eksport', import: 'Import', internal: 'Internflyt' }[p.direction] || 'Flyt';
@@ -1060,7 +1176,9 @@
         map.setFilter('flows-highlight', ['==', ['get', 'id'], p.id]);
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
         selectedZone = null;
+        selectedView = null;
         renderBalanceSection(null);
+        renderReservoirSection(null);
       }
       else if (f.layer.id === 'reservoirs-layer') {
         const shortZone = p.zone.replace('_', ''), region = ZONE_NAMES[shortZone] || '';
@@ -1069,9 +1187,11 @@
         
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], shortZone]);
         map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
-        // Magasin-tap aktiverer også sonens balance (samme NO_x).
+        // Magasin-tap aktiverer reservoir-detalj for sonen (sone og batteri deler NO_x).
         selectedZone = p.zone; // p.zone er allerede "NO_x"-format
+        selectedView = 'reservoir';
         renderBalanceSection(p.zone);
+        renderReservoirSection(p.zone);
       }
       
       if (window.innerWidth <= 768) setSheetState('half');
@@ -1083,7 +1203,9 @@
       if (map.getLayer('zones-highlight')) map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
       if (map.getLayer('flows-highlight')) map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
       selectedZone = null;
+      selectedView = null;
       renderBalanceSection(null);
+      renderReservoirSection(null);
       if (window.innerWidth <= 768) setSheetState('peek');
     }
 
@@ -1215,7 +1337,9 @@
       if (!sections.length) return;
 
       // Felles tilstandsbestemmelse: skal seksjonen vises i det hele tatt?
-      const hide = !balanceVisible || !zoneKey;
+      // Vises kun når balance er aktivt valgt (sone-tap) — ikke når brukeren
+      // har tappet et batteri (da skal reservoir-panelet vises i stedet).
+      const hide = !balanceVisible || !zoneKey || selectedView !== 'balance';
       const haveData = balanceData && balanceData.zones && zoneKey && balanceData.zones[zoneKey];
 
       sections.forEach(section => {
@@ -1316,6 +1440,135 @@
         }
       });
     }
+
+    function renderReservoirSection(zoneKey) {
+      // Speiler renderBalanceSection-mønsteret: én funksjon rendrer i alle
+      // .reservoir-section-containere (mobil-sheet + desktop-panel).
+      const sections = document.querySelectorAll('.reservoir-section');
+      if (!sections.length) return;
+
+      // Vises kun når reservoir er aktivt valgt (batteri-tap).
+      const hide = !zoneKey || selectedView !== 'reservoir';
+      const r = reservoirsData && zoneKey ? reservoirsData[zoneKey] : null;
+      const haveData = r != null;
+
+      sections.forEach(section => {
+        if (hide) {
+          section.classList.add('hidden');
+          return;
+        }
+        section.classList.remove('hidden');
+
+        const subEl = section.querySelector('.reservoir-subtitle');
+        const headlineEl = section.querySelector('.reservoir-headline');
+        const envEl = section.querySelector('.reservoir-envelope');
+        const envMetaEl = section.querySelector('.reservoir-envelope-meta');
+        const topListEl = section.querySelector('.reservoir-top-list');
+        const metaEl = section.querySelector('.reservoir-meta');
+
+        if (!haveData) {
+          if (subEl) subEl.textContent = '—';
+          if (headlineEl) headlineEl.innerHTML = '<span class="pct">—</span>';
+          if (envEl) envEl.innerHTML = '';
+          if (envMetaEl) envMetaEl.innerHTML = '';
+          if (topListEl) topListEl.innerHTML = '';
+          if (metaEl) metaEl.textContent = '';
+          return;
+        }
+
+        // --- Subtitle: region + uke ---
+        if (subEl) {
+          const region = ZONE_NAMES[zoneKey.replace('_', '')] || zoneKey;
+          subEl.textContent = `${region} (${zoneKey.replace('_', '')}) · Uke ${r.week}`;
+        }
+
+        // --- Headline: % + endring siste uke ---
+        const change = r.change_percent;
+        const changeClass = change == null ? '' : (change >= 0 ? 'pos' : 'neg');
+        const changeSign = change == null ? '' : (change >= 0 ? '+' : '');
+        const pctTxt = r.fill_percent != null ? r.fill_percent.toFixed(1) : '—';
+        if (headlineEl) {
+          headlineEl.innerHTML = `
+            <span class="pct">${pctTxt} %</span>
+            ${change != null ? `<span class="delta ${changeClass}">${changeSign}${change.toFixed(1)} %-poeng siste uke</span>` : ''}
+          `;
+        }
+
+        // --- Envelope: historisk min/median/max-skala med nå-markør ---
+        const hist = r.historical;
+        if (hist && envEl && envMetaEl) {
+          const min = hist.min_percent, max = hist.max_percent, median = hist.median_percent;
+          const range = max - min;
+          // Pad skalaen 5 % på hver side så markøren ikke kollapser i kantene
+          // hvis nå-verdien sammenfaller med min eller max.
+          const pad = range > 0 ? range * 0.08 : 5;
+          const scaleMin = min - pad, scaleMax = max + pad, scaleRange = scaleMax - scaleMin;
+          const pos = v => ((v - scaleMin) / scaleRange) * 100;
+
+          const medianPos = pos(median).toFixed(1);
+          const now = r.fill_percent;
+          const nowPos = now != null ? Math.max(0, Math.min(100, pos(now))).toFixed(1) : null;
+
+          envEl.innerHTML = `
+            <div class="track"></div>
+            <div class="median-tick" style="left: ${medianPos}%;" title="Median: ${median.toFixed(1)} %"></div>
+            ${nowPos != null ? `<div class="now-marker" style="left: ${nowPos}%;" title="Nå: ${now.toFixed(1)} %"></div>` : ''}
+          `;
+          envMetaEl.innerHTML = `
+            <span>${Math.round(min)} % min</span>
+            <span>${Math.round(median)} % median</span>
+            <span>${Math.round(max)} % max</span>
+          `;
+        } else if (envEl) {
+          envEl.innerHTML = '';
+          if (envMetaEl) envMetaEl.innerHTML = '';
+        }
+
+        // --- Topp 5 magasin ---
+        if (topListEl) {
+          if (r.top_reservoirs && r.top_reservoirs.length) {
+            topListEl.innerHTML = r.top_reservoirs.map(m => `
+              <div class="item">
+                <div class="row">
+                  <span class="name">${m.name}</span>
+                  <span class="volume">${m.volume_mill_m3.toLocaleString('nb-NO')} mill. m³</span>
+                </div>
+                ${m.note ? `<div class="note">${m.note}</div>` : ''}
+              </div>
+            `).join('');
+          } else {
+            topListEl.innerHTML = '';
+          }
+        }
+
+        // --- Meta: referanseperiode + neste publisering ---
+        if (metaEl) {
+          const parts = [];
+          if (hist) parts.push(`Referanse: ${hist.reference_period} (${hist.years_in_sample} år)`);
+          if (r.measurement_date) {
+            const d = new Date(r.measurement_date);
+            parts.push(`Måling ${d.toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit' })}`);
+          }
+          if (r.next_publication) {
+            const d = new Date(r.next_publication);
+            parts.push(`Neste publisering ${d.toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit' })}`);
+          }
+          metaEl.textContent = parts.join(' · ');
+        }
+      });
+    }
+
+    // Tilbake-knappen i reservoir-panelet bytter visning til balance for samme sone.
+    // Bruker event delegation siden begge panel-instanser (desktop + mobil) har knapper.
+    document.addEventListener('click', (e) => {
+      if (e.target.classList && e.target.classList.contains('reservoir-back')) {
+        if (selectedZone) {
+          selectedView = 'balance';
+          renderBalanceSection(selectedZone);
+          renderReservoirSection(selectedZone);
+        }
+      }
+    });
 
     
     bindToggle('spotpris', v => { spotPriceVisible = v; if (!v) zonePopup.remove(); });
