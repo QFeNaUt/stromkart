@@ -859,7 +859,7 @@
   <script type="module">
     import { createArrowIcon, createFlagIcon, createBatteryIcon } from './js/icons.js';
     import {
-      API_BASE, PRICE_PAINT,
+      PRICE_PAINT,
       ZONE_COLORS, ZONE_NAMES, ZONE_LINE_PAINT, ZONE_CENTROIDS,
       CITIES,
       FLOW_COLORS, FLOW_WIDTH, FLOW_OPACITY, FLOW_OPACITY_STALE,
@@ -870,6 +870,7 @@
     } from './js/config.js';
     import { map, zonePopup, flowPopup } from './js/map.js';
     import { state } from './js/state.js';
+    import { fetchAll } from './js/api.js';
 
     // ---------------------------------------------------------
     // 1) Kart
@@ -1014,20 +1015,6 @@
     // ---------------------------------------------------------
     // Hent data
     // ---------------------------------------------------------
-    async function fetchWithRetry(url, retries = 3, backoffMs = 2000) {
-      for (let i = 0; i < retries; i++) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) return res;
-          if ([502, 504, 530].includes(res.status)) {
-            await new Promise(r => setTimeout(r, backoffMs)); continue;
-          }
-          return res;
-        } catch (err) { await new Promise(r => setTimeout(r, backoffMs)); }
-      }
-      return fetch(url);
-    }
-
     
     let overlayHandlersAttached = false; let initialFitDone = false;
 
@@ -1040,22 +1027,7 @@
     async function loadData() {
       try {
         const errorDiv = document.getElementById('error'); errorDiv.textContent = '';
-        const [zonesRes, pricesRes, todayRes, flowsRes, reservoirsRes, balanceRes] = await Promise.all([
-          fetchWithRetry(`${API_BASE}/api/zones/`), fetchWithRetry(`${API_BASE}/api/prices/current`),
-          fetchWithRetry(`${API_BASE}/api/prices/today`), fetchWithRetry(`${API_BASE}/api/flows/current`),
-          fetchWithRetry(`${API_BASE}/api/reservoirs/current`),
-          fetchWithRetry(`${API_BASE}/api/balance/current`),
-        ]);
-
-        if (!zonesRes.ok) throw new Error(`/api/zones failed`);
-        if (!pricesRes.ok) throw new Error(`/api/prices/current failed`);
-
-        const zones = await zonesRes.json();
-        const prices = await pricesRes.json();
-        state.todayPrices = todayRes.ok ? await todayRes.json() : {};
-        const flows = flowsRes.ok ? await flowsRes.json() : null;
-        state.reservoirsData = reservoirsRes.ok ? (await reservoirsRes.json()).areas : null;
-        state.balanceData = balanceRes.ok ? await balanceRes.json() : null;
+        const { zones, prices, flows } = await fetchAll();
 
         // Bygg tidsakse fra dagens serie. Hvis vi har en tidsakse, dikteres
         // sone-prisene av (state.currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
