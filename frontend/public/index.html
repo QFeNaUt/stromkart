@@ -868,23 +868,15 @@
       CONCEPT_ORDER, CONCEPTS, KEY_ITEMS,
       HELP_SEEN_KEY,
     } from './js/config.js';
+    import { map, zonePopup, flowPopup } from './js/map.js';
+    import { state } from './js/state.js';
 
     // ---------------------------------------------------------
     // 1) Kart
     // ---------------------------------------------------------
-    const map = new maplibregl.Map({
-      container: 'map',
-      style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-      center: [12.5, 64.5],
-      zoom: 3.8,
-      attributionControl: { compact: true },
-    });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }), 'top-right');
-    map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-right');
 
-    let mapLoaded = false;
     map.on('load', () => {
-      mapLoaded = true;
+      state.mapLoaded = true;
       if (!map.hasImage('flow-arrow')) map.addImage('flow-arrow', createArrowIcon(28));
       ['SE', 'FI', 'DK', 'DE', 'NL', 'GB'].forEach(code => {
         if (!map.hasImage(`flag-${code}`)) map.addImage(`flag-${code}`, createFlagIcon(code));
@@ -893,7 +885,7 @@
         const key = `battery-${pct}`;
         if (!map.hasImage(key)) map.addImage(key, createBatteryIcon(pct));
       }
-      if (zonesData) addOverlays();
+      if (state.zonesData) addOverlays();
     });
 
     // ---------------------------------------------------------
@@ -1036,24 +1028,14 @@
       return fetch(url);
     }
 
-    let todayPrices = {}; let zonesData = null; let flowsData = null; let flowsFlagsData = null; let reservoirsData = null; let balanceData = null;
     
     let overlayHandlersAttached = false; let initialFitDone = false;
-    let spotPriceVisible = true; let flowsVisible = true; let flowsIsStale = false; let reservoirsVisible = true; let balanceVisible = true;
-    let selectedZone = null; // hvilken sone som er aktiv i sheet-konteksten (for re-render av balance)
-    let selectedView = null; // 'balance' | 'reservoir' | null — hvilket detaljpanel som vises for selectedZone
 
     // Time-slider state
-    let timeAxis = [];          // Date[] — kanonisk tidsakse (lengste sone-serie)
-    let currentIndex = 0;       // hvilken 15-min-slot vises akkurat nå
-    let nowIndex = 0;           // hvor i timeAxis "nå" befinner seg
-    let userPinned = false;     // true når brukeren har dratt slideren bort fra "nå"
     let isPlaying = false;
     let playInterval = null;
     let sliderCollapsed = false; // minimert tidslinje (sesjons-state, ikke persistent)
 
-    const zonePopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
-    const flowPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
 
     async function loadData() {
       try {
@@ -1070,24 +1052,24 @@
 
         const zones = await zonesRes.json();
         const prices = await pricesRes.json();
-        todayPrices = todayRes.ok ? await todayRes.json() : {};
+        state.todayPrices = todayRes.ok ? await todayRes.json() : {};
         const flows = flowsRes.ok ? await flowsRes.json() : null;
-        reservoirsData = reservoirsRes.ok ? (await reservoirsRes.json()).areas : null;
-        balanceData = balanceRes.ok ? await balanceRes.json() : null;
+        state.reservoirsData = reservoirsRes.ok ? (await reservoirsRes.json()).areas : null;
+        state.balanceData = balanceRes.ok ? await balanceRes.json() : null;
 
         // Bygg tidsakse fra dagens serie. Hvis vi har en tidsakse, dikteres
-        // sone-prisene av (currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
+        // sone-prisene av (state.currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
         buildTimeAxis();
-        nowIndex = computeNowIndex();
+        state.nowIndex = computeNowIndex();
 
         let snapshot;
-        if (timeAxis.length > 0) {
-          if (!userPinned) {
-            currentIndex = nowIndex;
+        if (state.timeAxis.length > 0) {
+          if (!state.userPinned) {
+            state.currentIndex = state.nowIndex;
           } else {
-            currentIndex = Math.min(currentIndex, timeAxis.length - 1);
+            state.currentIndex = Math.min(state.currentIndex, state.timeAxis.length - 1);
           }
-          snapshot = buildSnapshot(currentIndex);
+          snapshot = buildSnapshot(state.currentIndex);
         } else {
           // Ingen today-data — bruk /api/prices/current direkte
           snapshot = prices;
@@ -1103,10 +1085,10 @@
           }
         }
         renderMap(zones); renderTable(snapshot); renderFlows(flows);
-        if (mapLoaded) addReservoirLayer();
+        if (state.mapLoaded) addReservoirLayer();
 
         // Slider-synlighet og UI-oppdatering
-        toggleSliderVisibility(timeAxis.length > 0);
+        toggleSliderVisibility(state.timeAxis.length > 0);
         updateSliderUI();
       } catch (err) {
         document.getElementById('error').textContent = 'Venter på nettverk...'; console.error(err);
@@ -1114,8 +1096,8 @@
     }
 
     function renderMap(zones) {
-      zonesData = zones;
-      if (mapLoaded) addOverlays();
+      state.zonesData = zones;
+      if (state.mapLoaded) addOverlays();
       if (!initialFitDone) {
         // Mobil får ekstra padding nederst så sheetets peek-state (~85px) ikke klemmer Sør-Norge
         const isMobile = window.innerWidth <= 768;
@@ -1126,10 +1108,10 @@
     }
 
     function addOverlays() {
-      if (!zonesData) return;
+      if (!state.zonesData) return;
       const zonesSrc = map.getSource('zones');
-      if (zonesSrc) zonesSrc.setData(zonesData);
-      else map.addSource('zones', { type: 'geojson', data: zonesData });
+      if (zonesSrc) zonesSrc.setData(state.zonesData);
+      else map.addSource('zones', { type: 'geojson', data: state.zonesData });
       
       if (!map.getLayer('zones-fill')) map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': PRICE_PAINT, 'fill-opacity': 0.55 } });
       
@@ -1147,12 +1129,12 @@
       if (!map.getLayer('cities-dot')) map.addLayer({ id: 'cities-dot', type: 'circle', source: 'cities', paint: { 'circle-radius': 3.5, 'circle-color': '#e6edf3', 'circle-stroke-color': '#0d1117', 'circle-stroke-width': 1.5 } });
       if (!map.getLayer('cities-label')) map.addLayer({ id: 'cities-label', type: 'symbol', source: 'cities', layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Semibold', 'Open Sans Regular'], 'text-size': 12, 'text-offset': [0.7, 0.15], 'text-anchor': 'left' }, paint: { 'text-color': '#f0f6fc', 'text-halo-color': '#0d1117', 'text-halo-width': 1.5 } });
 
-      if (flowsData) addFlowLayers();
-      if (reservoirsData) addReservoirLayer();
+      if (state.flowsData) addFlowLayers();
+      if (state.reservoirsData) addReservoirLayer();
       updateOverlayVisibility();
-      if (selectedZone) {
-        renderBalanceSection(selectedZone);
-        renderReservoirSection(selectedZone);
+      if (state.selectedZone) {
+        renderBalanceSection(state.selectedZone);
+        renderReservoirSection(state.selectedZone);
       }
 
       if (!overlayHandlersAttached) {
@@ -1169,16 +1151,16 @@
     }
 
     function renderFlows(payload) {
-      flowsIsStale = payload?.is_stale === true;
-      flowsData = buildFlowGeoJSON(payload);
-      flowsFlagsData = buildFlagGeoJSON(payload);
-      if (mapLoaded) addFlowLayers();
+      state.flowsIsStale = payload?.is_stale === true;
+      state.flowsData = buildFlowGeoJSON(payload);
+      state.flowsFlagsData = buildFlagGeoJSON(payload);
+      if (state.mapLoaded) addFlowLayers();
     }
 
     function addFlowLayers() {
-      if (!flowsData) return;
+      if (!state.flowsData) return;
       const src = map.getSource('flows');
-      if (src) src.setData(flowsData); else map.addSource('flows', { type: 'geojson', data: flowsData });
+      if (src) src.setData(state.flowsData); else map.addSource('flows', { type: 'geojson', data: state.flowsData });
 
       const beforeId = map.getLayer('cities-dot') ? 'cities-dot' : undefined;
 
@@ -1193,21 +1175,21 @@
       if (!map.getLayer('flows-line')) map.addLayer({ id: 'flows-line', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['match', ['get', 'direction'], 'export', FLOW_COLORS.export, 'import', FLOW_COLORS.import, 'internal', FLOW_COLORS.internal, FLOW_COLORS.internal], 'line-width': FLOW_WIDTH } }, beforeId);
       if (!map.getLayer('flows-arrow')) map.addLayer({ id: 'flows-arrow', type: 'symbol', source: 'flows', layout: { 'symbol-placement': 'line-center', 'icon-image': 'flow-arrow', 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-size': ['interpolate', ['linear'], ['coalesce', ['get', 'mw'], 0], 0, 0.55, 400, 0.85, 1400, 1.20] } }, beforeId);
 
-      const lineOpacity = flowsIsStale ? FLOW_OPACITY_STALE : FLOW_OPACITY;
+      const lineOpacity = state.flowsIsStale ? FLOW_OPACITY_STALE : FLOW_OPACITY;
       map.setPaintProperty('flows-line', 'line-opacity', lineOpacity);
       map.setPaintProperty('flows-arrow', 'icon-opacity', lineOpacity);
 
-      if (flowsFlagsData) {
+      if (state.flowsFlagsData) {
         const flagSrc = map.getSource('flows-flags');
-        if (flagSrc) flagSrc.setData(flowsFlagsData); else map.addSource('flows-flags', { type: 'geojson', data: flowsFlagsData });
+        if (flagSrc) flagSrc.setData(state.flowsFlagsData); else map.addSource('flows-flags', { type: 'geojson', data: state.flowsFlagsData });
         if (!map.getLayer('flows-flags-layer')) map.addLayer({ id: 'flows-flags-layer', type: 'symbol', source: 'flows-flags', layout: { 'icon-image': ['concat', 'flag-', ['get', 'country']], 'icon-size': 1, 'icon-offset': [0, -14], 'icon-allow-overlap': true, 'icon-ignore-placement': true } }, beforeId);
       }
     }
 
     function addReservoirLayer() {
-      if (!reservoirsData) return;
+      if (!state.reservoirsData) return;
       const features = [];
-      for (const [zoneCode, info] of Object.entries(reservoirsData)) {
+      for (const [zoneCode, info] of Object.entries(state.reservoirsData)) {
         const coords = ZONE_CENTROIDS[zoneCode];
         if (!coords || info.fill_percent == null) continue;
         const bucket = Math.round(info.fill_percent / 5) * 5;
@@ -1230,14 +1212,14 @@
       const f = e.features[0], p = f.properties;
       const accent = ZONE_COLORS[p.zoneName] || '#6b7280', region = ZONE_NAMES[p.zoneName] || '';
       const timeStr = p.timestamp ? new Date(p.timestamp).toLocaleString('no-NO', { dateStyle: 'short', timeStyle: 'short' }) : '';
-      const atNow = (currentIndex === nowIndex);
+      const atNow = (state.currentIndex === state.nowIndex);
       zonePopup.setLngLat(e.lngLat).setHTML(`
         <div class="popup-accent" style="background:${accent}"></div>
         <div class="popup-body">
           <div class="popup-region">${region}</div><div class="popup-zone">${p.zoneName}</div>
           <div class="popup-price" style="color:${priceColor(p.price_ore_kwh)}">${p.price_ore_kwh != null ? p.price_ore_kwh.toFixed(1) : '—'}<span class="unit">øre/kWh</span></div>
           ${p.price_eur_mwh != null ? `<div class="popup-subprice">${p.price_eur_mwh.toFixed(2)} EUR/MWh</div>` : ''}
-          ${renderSparkline(todayPrices[p.zoneName], accent, timeAxis.length > 0 ? currentIndex : null)}
+          ${renderSparkline(state.todayPrices[p.zoneName], accent, state.timeAxis.length > 0 ? state.currentIndex : null)}
           ${timeStr ? `<div class="popup-meta">${atNow ? 'Nå · ' : ''}${timeStr}</div>` : ''}
         </div>
       `).addTo(map);
@@ -1254,7 +1236,7 @@
       flowPopup.setLngLat(e.lngLat).setHTML(`
         <div class="popup-accent" style="background:${color}"></div>
         <div class="popup-body">
-          ${flowsIsStale ? '<div class="popup-stale">⚠ Bufret data</div>' : ''}
+          ${state.flowsIsStale ? '<div class="popup-stale">⚠ Bufret data</div>' : ''}
           ${p.cable ? `<div class="popup-region">${p.cable}</div>` : ''}
           <div class="popup-zone">${p.from} → ${p.to}</div>
           <div class="popup-price" style="color:${color}">${Number(p.mw).toFixed(0)}<span class="unit">MW</span></div>
@@ -1284,15 +1266,15 @@
         const zone = p.zoneName, region = ZONE_NAMES[zone] || '';
         const priceOre = p.price_ore_kwh != null ? p.price_ore_kwh.toFixed(1) : '—';
         const zoneKey = `NO_${zone.slice(2)}`; // "NO2" -> "NO_2"
-        const resInfo = reservoirsData ? reservoirsData[zoneKey] : null;
+        const resInfo = state.reservoirsData ? state.reservoirsData[zoneKey] : null;
         const resTxt = resInfo && resInfo.fill_percent != null ? ` • Magasin: ${resInfo.fill_percent.toFixed(1)}%` : '';
         titleEl.textContent = `${region} (${zone})`;
         descEl.textContent = `Spotpris: ${priceOre} øre/kWh${resTxt}`;
         
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], zone]);
         map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
-        selectedZone = zoneKey;
-        selectedView = 'balance';
+        state.selectedZone = zoneKey;
+        state.selectedView = 'balance';
         renderBalanceSection(zoneKey);
         renderReservoirSection(zoneKey);
       } 
@@ -1303,8 +1285,8 @@
         
         map.setFilter('flows-highlight', ['==', ['get', 'id'], p.id]);
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
-        selectedZone = null;
-        selectedView = null;
+        state.selectedZone = null;
+        state.selectedView = null;
         renderBalanceSection(null);
         renderReservoirSection(null);
       }
@@ -1316,8 +1298,8 @@
         map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], shortZone]);
         map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
         // Magasin-tap aktiverer reservoir-detalj for sonen (sone og batteri deler NO_x).
-        selectedZone = p.zone; // p.zone er allerede "NO_x"-format
-        selectedView = 'reservoir';
+        state.selectedZone = p.zone; // p.zone er allerede "NO_x"-format
+        state.selectedView = 'reservoir';
         renderBalanceSection(p.zone);
         renderReservoirSection(p.zone);
       }
@@ -1330,8 +1312,8 @@
       document.getElementById('sheet-context-desc').textContent = 'Velg et område i kartet, eller dra opp';
       if (map.getLayer('zones-highlight')) map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
       if (map.getLayer('flows-highlight')) map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
-      selectedZone = null;
-      selectedView = null;
+      state.selectedZone = null;
+      state.selectedView = null;
       renderBalanceSection(null);
       renderReservoirSection(null);
       if (window.innerWidth <= 768) setSheetState('peek');
@@ -1362,7 +1344,7 @@
       const generateRows = () => {
         let html = '';
         ['NO1', 'NO2', 'NO3', 'NO4', 'NO5'].forEach(z => {
-          const p = snapshot[z], priceOre = p?.price_ore_kwh != null ? p.price_ore_kwh : null, resInfo = reservoirsData ? reservoirsData[`NO_${z.slice(2)}`] : null;
+          const p = snapshot[z], priceOre = p?.price_ore_kwh != null ? p.price_ore_kwh : null, resInfo = state.reservoirsData ? state.reservoirsData[`NO_${z.slice(2)}`] : null;
           html += `<tr><td class="zone"><span class="swatch" style="background:${ZONE_COLORS[z]||'#6b7280'}"></span>${z}</td><td class="price" style="color:${priceColor(priceOre)}">${priceOre != null ? priceOre.toFixed(1) : '—'}<span class="unit">øre/kWh</span>${resInfo?.fill_percent != null ? `<div class="subprice">Magasin: ${resInfo.fill_percent.toFixed(1)} %</div>` : ''}</td></tr>`;
         });
         return html;
@@ -1377,18 +1359,18 @@
     // Toggles (Synkroniserer Desktop & Mobil)
     // ---------------------------------------------------------
     function updateOverlayVisibility() {
-      const zV = spotPriceVisible ? 'visible' : 'none';
+      const zV = state.spotPriceVisible ? 'visible' : 'none';
       if (map.getLayer('zones-fill')) map.setLayoutProperty('zones-fill', 'visibility', zV);
       if (map.getLayer('zones-line')) map.setLayoutProperty('zones-line', 'visibility', zV);
       if (map.getLayer('zones-highlight')) map.setLayoutProperty('zones-highlight', 'visibility', zV);
 
-      const fV = flowsVisible ? 'visible' : 'none';
+      const fV = state.flowsVisible ? 'visible' : 'none';
       if (map.getLayer('flows-line')) map.setLayoutProperty('flows-line', 'visibility', fV);
       if (map.getLayer('flows-arrow')) map.setLayoutProperty('flows-arrow', 'visibility', fV);
       if (map.getLayer('flows-flags-layer')) map.setLayoutProperty('flows-flags-layer', 'visibility', fV);
       if (map.getLayer('flows-highlight')) map.setLayoutProperty('flows-highlight', 'visibility', fV);
 
-      const rV = reservoirsVisible ? 'visible' : 'none';
+      const rV = state.reservoirsVisible ? 'visible' : 'none';
       if (map.getLayer('reservoirs-layer')) map.setLayoutProperty('reservoirs-layer', 'visibility', rV);
     }
 
@@ -1423,8 +1405,8 @@
       // Felles tilstandsbestemmelse: skal seksjonen vises i det hele tatt?
       // Vises kun når balance er aktivt valgt (sone-tap) — ikke når brukeren
       // har tappet et batteri (da skal reservoir-panelet vises i stedet).
-      const hide = !balanceVisible || !zoneKey || selectedView !== 'balance';
-      const haveData = balanceData && balanceData.zones && zoneKey && balanceData.zones[zoneKey];
+      const hide = !state.balanceVisible || !zoneKey || state.selectedView !== 'balance';
+      const haveData = state.balanceData && state.balanceData.zones && zoneKey && state.balanceData.zones[zoneKey];
 
       sections.forEach(section => {
         if (hide) {
@@ -1452,8 +1434,8 @@
           return;
         }
 
-        const z = balanceData.zones[zoneKey];
-        const isStale = balanceData.is_stale === true;
+        const z = state.balanceData.zones[zoneKey];
+        const isStale = state.balanceData.is_stale === true;
         if (banner) banner.classList.toggle('visible', isStale);
 
         // Subtitle på desktop-panelet viser hvilken sone som er aktiv
@@ -1532,8 +1514,8 @@
       if (!sections.length) return;
 
       // Vises kun når reservoir er aktivt valgt (batteri-tap).
-      const hide = !zoneKey || selectedView !== 'reservoir';
-      const r = reservoirsData && zoneKey ? reservoirsData[zoneKey] : null;
+      const hide = !zoneKey || state.selectedView !== 'reservoir';
+      const r = state.reservoirsData && zoneKey ? state.reservoirsData[zoneKey] : null;
       const haveData = r != null;
 
       sections.forEach(section => {
@@ -1646,22 +1628,22 @@
     // Bruker event delegation siden begge panel-instanser (desktop + mobil) har knapper.
     document.addEventListener('click', (e) => {
       if (e.target.classList && e.target.classList.contains('reservoir-back')) {
-        if (selectedZone) {
-          selectedView = 'balance';
-          renderBalanceSection(selectedZone);
-          renderReservoirSection(selectedZone);
+        if (state.selectedZone) {
+          state.selectedView = 'balance';
+          renderBalanceSection(state.selectedZone);
+          renderReservoirSection(state.selectedZone);
         }
       }
     });
 
     
-    bindToggle('spotpris', v => { spotPriceVisible = v; if (!v) zonePopup.remove(); });
-    bindToggle('flyt', v => { flowsVisible = v; if (!v) flowPopup.remove(); });
-    bindToggle('magasin', v => { reservoirsVisible = v; });
+    bindToggle('spotpris', v => { state.spotPriceVisible = v; if (!v) zonePopup.remove(); });
+    bindToggle('flyt', v => { state.flowsVisible = v; if (!v) flowPopup.remove(); });
+    bindToggle('magasin', v => { state.reservoirsVisible = v; });
     bindToggle('balance', v => {
-      balanceVisible = v;
+      state.balanceVisible = v;
       // Re-render: viser/skjuler seksjonen basert på toggle + om sone er valgt.
-      renderBalanceSection(selectedZone);
+      renderBalanceSection(state.selectedZone);
     });
 
     // ---------------------------------------------------------
@@ -1672,19 +1654,19 @@
       // I praksis er alle 5 like fra ENTSO-E, men vi tar lengste for sikkerhets skyld.
       let longest = [];
       for (const zone of ['NO1', 'NO2', 'NO3', 'NO4', 'NO5']) {
-        const series = todayPrices[zone]?.prices;
+        const series = state.todayPrices[zone]?.prices;
         if (series && series.length > longest.length) longest = series;
       }
-      timeAxis = longest.map(d => new Date(d.timestamp));
+      state.timeAxis = longest.map(d => new Date(d.timestamp));
     }
 
     function computeNowIndex() {
-      if (!timeAxis.length) return 0;
+      if (!state.timeAxis.length) return 0;
       const now = Date.now();
       // Samme mønster som backend: siste indeks der timestamp <= now
       let idx = 0;
-      for (let i = 0; i < timeAxis.length; i++) {
-        if (timeAxis[i].getTime() <= now) idx = i;
+      for (let i = 0; i < state.timeAxis.length; i++) {
+        if (state.timeAxis[i].getTime() <= now) idx = i;
         else break;
       }
       return idx;
@@ -1693,7 +1675,7 @@
     function buildSnapshot(idx) {
       const snap = {};
       for (const zone of ['NO1', 'NO2', 'NO3', 'NO4', 'NO5']) {
-        const series = todayPrices[zone]?.prices;
+        const series = state.todayPrices[zone]?.prices;
         if (series && series[idx]) {
           snap[zone] = {
             price_ore_kwh: series[idx].price_ore_kwh,
@@ -1708,14 +1690,14 @@
     }
 
     function renderAtIndex(idx) {
-      if (!timeAxis.length) return;
-      currentIndex = Math.max(0, Math.min(idx, timeAxis.length - 1));
+      if (!state.timeAxis.length) return;
+      state.currentIndex = Math.max(0, Math.min(idx, state.timeAxis.length - 1));
 
-      const snapshot = buildSnapshot(currentIndex);
+      const snapshot = buildSnapshot(state.currentIndex);
 
       // Oppdater zone features og dytt nytt data til kilden — MapLibre re-tegner fyllene
-      if (zonesData) {
-        for (const f of zonesData.features) {
+      if (state.zonesData) {
+        for (const f of state.zonesData.features) {
           const p = snapshot[f.properties.zoneName];
           if (p) {
             f.properties.price_ore_kwh = p.price_ore_kwh;
@@ -1724,7 +1706,7 @@
           }
         }
         const src = map.getSource('zones');
-        if (src) src.setData(zonesData);
+        if (src) src.setData(state.zonesData);
       }
 
       renderTable(snapshot);
@@ -1733,23 +1715,23 @@
 
     function findDayBoundaryIndex() {
       // Returnerer indeksen der vi krysser fra dag N til dag N+1, eller -1 hvis aksen er innen ett døgn
-      if (timeAxis.length < 2) return -1;
-      const firstDay = timeAxis[0].toDateString();
-      for (let i = 1; i < timeAxis.length; i++) {
-        if (timeAxis[i].toDateString() !== firstDay) return i;
+      if (state.timeAxis.length < 2) return -1;
+      const firstDay = state.timeAxis[0].toDateString();
+      for (let i = 1; i < state.timeAxis.length; i++) {
+        if (state.timeAxis[i].toDateString() !== firstDay) return i;
       }
       return -1;
     }
 
     function formatTimeLabel() {
-      if (!timeAxis.length) return '—';
-      const t = timeAxis[currentIndex];
+      if (!state.timeAxis.length) return '—';
+      const t = state.timeAxis[state.currentIndex];
       const now = new Date();
       const tomorrow = new Date(now.getTime() + 86400000);
       const timeStr = t.toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' });
 
       let prefix;
-      if (currentIndex === nowIndex) {
+      if (state.currentIndex === state.nowIndex) {
         prefix = '<span class="live-dot"></span>Nå';
       } else if (t.toDateString() === now.toDateString()) {
         prefix = 'I dag';
@@ -1762,8 +1744,8 @@
     }
 
     function updateSliderUI() {
-      if (!timeAxis.length) return;
-      const maxIdx = timeAxis.length - 1;
+      if (!state.timeAxis.length) return;
+      const maxIdx = state.timeAxis.length - 1;
 
       // Tidslabel (både i full UI og kompakt pille)
       const label = formatTimeLabel();
@@ -1772,11 +1754,11 @@
       // Range-input max + value
       document.querySelectorAll('.time-slider-range').forEach(el => {
         if (parseInt(el.max, 10) !== maxIdx) el.max = String(maxIdx);
-        if (parseInt(el.value, 10) !== currentIndex) el.value = String(currentIndex);
+        if (parseInt(el.value, 10) !== state.currentIndex) el.value = String(state.currentIndex);
       });
 
       // "Nå"-markør på sliderspor
-      const nowPct = maxIdx > 0 ? (nowIndex / maxIdx) * 100 : 0;
+      const nowPct = maxIdx > 0 ? (state.nowIndex / maxIdx) * 100 : 0;
       document.querySelectorAll('.time-slider-now-marker').forEach(el => {
         el.style.left = `${nowPct}%`;
         el.classList.add('visible');
@@ -1795,7 +1777,7 @@
       });
 
       // "Nå"-knapp dimmes når vi allerede er på nå
-      const atNow = (currentIndex === nowIndex);
+      const atNow = (state.currentIndex === state.nowIndex);
       document.querySelectorAll('.time-slider-now').forEach(el => {
         el.classList.toggle('at-now', atNow);
       });
@@ -1817,13 +1799,13 @@
     }
 
     function startPlay() {
-      if (!timeAxis.length || isPlaying) return;
+      if (!state.timeAxis.length || isPlaying) return;
       isPlaying = true;
       document.querySelectorAll('.time-slider-play').forEach(el => { el.textContent = '⏸'; });
       playInterval = setInterval(() => {
-        let next = currentIndex + 1;
-        if (next >= timeAxis.length) next = 0; // loop tilbake til start
-        userPinned = true;
+        let next = state.currentIndex + 1;
+        if (next >= state.timeAxis.length) next = 0; // loop tilbake til start
+        state.userPinned = true;
         renderAtIndex(next);
       }, PLAY_SPEED_MS);
     }
@@ -1839,9 +1821,9 @@
 
     function snapToNow() {
       pausePlay();
-      userPinned = false;
-      nowIndex = computeNowIndex();
-      renderAtIndex(nowIndex);
+      state.userPinned = false;
+      state.nowIndex = computeNowIndex();
+      renderAtIndex(state.nowIndex);
     }
 
     function setupSliderEvents() {
@@ -1850,11 +1832,11 @@
         // selv før noen bevegelse skjer. Dekker både mus og touch.
         range.addEventListener('pointerdown', () => {
           pausePlay();
-          userPinned = true;
+          state.userPinned = true;
         });
         // 'input' fyrer kontinuerlig under drag (smooth animasjon)
         range.addEventListener('input', (e) => {
-          userPinned = true;
+          state.userPinned = true;
           renderAtIndex(parseInt(e.target.value, 10));
         });
       });
