@@ -863,8 +863,6 @@
       ZONE_COLORS, ZONE_NAMES, ZONE_LINE_PAINT,
       CITIES,
       FLOW_COLORS,
-      CONCEPT_ORDER, CONCEPTS, KEY_ITEMS,
-      HELP_SEEN_KEY,
     } from './js/config.js';
     import { map, zonePopup, flowPopup } from './js/map.js';
     import { state } from './js/state.js';
@@ -875,6 +873,7 @@
     import { renderBalanceSection } from './js/layers/balance.js';
     import { setSheetState, initSheet } from './js/ui/sheet.js';
     import { initSlider, updateSliderUI, toggleSliderVisibility } from './js/ui/slider.js';
+    import { initHelp } from './js/ui/help.js';
 
     // ---------------------------------------------------------
     // 1) Kart
@@ -894,7 +893,7 @@
     });
 
     // ---------------------------------------------------------
-    // 2) Mobile Bottom Sheet & Slider — bootstrap
+    // 2) Mobile Bottom Sheet & Slider + forklaringslag — bootstrap
     // ---------------------------------------------------------
     // Sheet-modulen (js/ui/sheet.js) eier all drag-/snap-mekanikk og sin
     // egen tilstand. onPeek kobler dismiss-gesten (dra helt ned) til
@@ -905,6 +904,9 @@
     // Slider-modulen (js/ui/slider.js) fester sine egne event-lyttere.
     // Elementene finnes statisk i DOM, så kallet kan skje her i bootstrap.
     initSlider();
+    // Forklaringslag (js/ui/help.js): bygger tegnforklaring + ordliste,
+    // fester klikk-/Escape-lyttere, og auto-viser ved første besøk.
+    initHelp();
 
     // ---------------------------------------------------------
     // Hent data
@@ -1203,89 +1205,6 @@
       renderBalanceSection(state.selectedZone);
     });
 
-
-    // ---------------------------------------------------------
-    // Forklaringslag: «Slik leser du kartet» + ordliste
-    // ---------------------------------------------------------
-
-    const helpOverlay = document.getElementById('help-overlay');
-
-    function buildKey() {
-      const flowDots = `<div class="key-dots">`
-        + `<span class="d"><i style="background:${FLOW_COLORS.export}"></i>Eksport</span>`
-        + `<span class="d"><i style="background:${FLOW_COLORS.import}"></i>Import</span>`
-        + `<span class="d"><i style="background:${FLOW_COLORS.internal}"></i>Internt</span>`
-        + `</div>`;
-      const html = KEY_ITEMS.map(it => {
-        const attrs = it.concept ? `data-concept="${it.concept}"` : 'disabled';
-        const dots = it.dots ? flowDots : '';
-        return `<button class="key-item" type="button" ${attrs}>`
-          + `<span class="key-swatch">${it.swatch}</span>`
-          + `<span class="key-text"><span class="key-label">${it.label}</span>`
-          + `<span class="key-desc">${it.desc}</span>${dots}</span>`
-          + `</button>`;
-      }).join('');
-      document.getElementById('help-key').innerHTML = html;
-    }
-
-    function buildGlossary() {
-      const html = CONCEPT_ORDER.map(key => {
-        const c = CONCEPTS[key];
-        return `<details class="gloss" id="gloss-${key}">`
-          + `<summary>${c.label}</summary>`
-          + `<div class="gloss-body">${c.body}</div>`
-          + `</details>`;
-      }).join('');
-      document.getElementById('help-glossary').innerHTML = html;
-    }
-
-    function openHelp(focusKey) {
-      helpOverlay.classList.add('open');
-      helpOverlay.setAttribute('aria-hidden', 'false');
-      if (focusKey && CONCEPTS[focusKey]) {
-        helpOverlay.querySelectorAll('.gloss').forEach(d => { d.open = (d.id === `gloss-${focusKey}`); });
-        const target = document.getElementById(`gloss-${focusKey}`);
-        if (target) {
-          target.classList.add('flash');
-          setTimeout(() => target.classList.remove('flash'), 1400);
-          requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }));
-        }
-      }
-      const closeBtn = helpOverlay.querySelector('.help-close');
-      if (closeBtn) closeBtn.focus();
-    }
-
-    function closeHelp() {
-      helpOverlay.classList.remove('open');
-      helpOverlay.setAttribute('aria-hidden', 'true');
-    }
-
-    // Auto-visning kun første besøk; knappen er alltid tilgjengelig etterpå.
-    function maybeAutoOpenHelp() {
-      let seen = false;
-      try { seen = localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (e) {}
-      if (seen) return;
-      try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e) {}
-      setTimeout(() => openHelp(), 700);
-    }
-
-    document.addEventListener('click', (e) => {
-      const badge = e.target.closest('[data-concept]');
-      if (badge) { e.preventDefault(); openHelp(badge.getAttribute('data-concept')); return; }
-      if (e.target.closest('[data-help-open]')) { openHelp(); return; }
-      if (e.target.closest('[data-help-close]')) { closeHelp(); return; }
-      if (e.target === helpOverlay) { closeHelp(); } // klikk på bakteppe
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && helpOverlay.classList.contains('open')) closeHelp();
-    });
-
-    function initHelp() {
-      buildKey();
-      buildGlossary();
-      maybeAutoOpenHelp();
-    }
-    initHelp();
 
     loadData(); setInterval(loadData, 5 * 60 * 1000);
   </script>
