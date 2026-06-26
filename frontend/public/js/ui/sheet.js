@@ -13,6 +13,7 @@
 
 const sheet = document.getElementById('bottom-sheet');
 const dragZone = document.getElementById('sheet-drag-zone');
+const scrollZone = document.getElementById('sheet-scroll-zone');
 
 // Modul-lokal tilstand (kryssgår ikke — blir her, ikke i state.js)
 let sheetSnapPoints = { peek: 0, half: 0, full: 0 };
@@ -35,8 +36,21 @@ export function initSheetGeometry() {
 export function setSheetState(state, animate = true) {
   if (window.innerWidth > 768) return;
   currentSheetState = state;
+  const target = sheetSnapPoints[state];
   sheet.style.transition = animate ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none';
-  sheet.style.transform = `translateY(${sheetSnapPoints[state]}px)`;
+  sheet.style.transform = `translateY(${target}px)`;
+
+  // Begrens scroll-området til synlig høyde. Uten dette tror nettleseren at
+  // den (delvis off-screen) containeren har nådd bunnen i half/peek, og lar
+  // deg ikke scrolle ned til de nederste sonene. Samme h-grunnlag som
+  // snap-punktene (getBoundingClientRect) holder regnestykket konsistent.
+  // Ved 'full' nullstilles begrensningen så CSS flex-grow styrer som før.
+  if (state === 'full') {
+    scrollZone.style.maxHeight = '';
+  } else {
+    const visible = sheet.getBoundingClientRect().height - target - dragZone.offsetHeight;
+    scrollZone.style.maxHeight = `${visible}px`;
+  }
 
   // Skjul mobil-slider ved 'full' (kartet er ikke synlig — slideren har ikke mening da).
   // Løs DOM-kobling (getElementById + classList), bevisst ingen import av slider.js.
