@@ -16,7 +16,8 @@ import { state } from './state.js';
 // Juster timeoutMs/retries her hvis du vil ha et strammere "Laster..."-tak.
 //
 // Ved oppbrukte forsøk KASTER funksjonen (i stedet for å returnere et bart
-// fetch-kall), slik at fetchAll sin Promise.allSettled fanger feilen pr. endepunkt.
+// fetch-kall), slik at allSettled-greinen i fetchOptional fanger feilen pr.
+// endepunkt — og slik at fetchCore sin Promise.all feiler raskt på kjernefeil.
 export async function fetchWithRetry(url, retries = 2, backoffMs = 2000, timeoutMs = 12000) {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController();
@@ -31,60 +32,70 @@ export async function fetchWithRetry(url, retries = 2, backoffMs = 2000, timeout
       return res; // ok, ikke-transient feil, eller siste forsøk
     } catch (err) {
       clearTimeout(timeoutId);
-      if (attempt >= retries) throw err; // oppbrukt — la allSettled fange den
+      if (attempt >= retries) throw err; // oppbrukt — la kalleren fange den
       await new Promise(r => setTimeout(r, backoffMs));
     }
   }
 }
 
-// Henter alle seks endepunkter parallelt med Promise.allSettled, slik at ETT
-// tregt/dødt endepunkt ikke lenger blokkerer hele kartet fra å laste (var
-// Promise.all, som ventet på at alle seks skulle settle).
+// Trekker ut JSON trygt: kun hvis kallet ble fulfilled OG svaret var ok.
+// .json() pakkes i try/catch så en korrupt body gir null i stedet for å kaste.
+// Delt helper for fetchOptional sine fire allSettled-resultater.
+async function getJson(settled) {
+  if (settled.status === 'fulfilled' && settled.value && settled.value.ok) {
+    try { return await settled.value.json(); } catch { return null; }
+  }
+  return null;
+}
+
+// --- BØLGE 1: kjernekart -----------------------------------------------------
+// Henter KUN de to harde kravene: zones (geometri) + prices/current (snapshot).
+// Disse er ikke de laggy ENTSO-E-lagene, så kjernekartet kan males raskt og kan
+// aldri lenger henge på et tregt valgfritt endepunkt — det venter ikke på dem.
 //
-// Skriver de kryssgående cachene (todayPrices/reservoirsData/balanceData) direkte
-// til state — de leses senere av render-/panel-laget. Returnerer de tre umiddelbart
-// konsumerte settene (zones/prices/flows) som loadData avleder fra lokalt.
-//
-// Kjernelagene (zones + prices/current) er harde krav: mangler de, kaster vi, og
-// loadData fanger og viser "Venter på nettverk...". De fire valgfrie lagene
-// degraderer grasiøst til {} / null hvis de timer ut eller feiler.
-export async function fetchAll() {
-  const results = await Promise.allSettled([
+// Promise.all (fail-fast): begge er obligatoriske, så hvis én feiler vil vi
+// avbryte umiddelbart. Kaster da videre til loadData, som viser
+// "Venter på nettverk..." og prøver på nytt ved neste poll-intervall.
+export async function fetchCore() {
+  const [zonesRes, pricesRes] = await Promise.all([
     fetchWithRetry(`${API_BASE}/api/zones/`),
     fetchWithRetry(`${API_BASE}/api/prices/current`),
+  ]);
+
+  // fetchWithRetry kan returnere en ikke-ok respons (ikke-transient feil / siste
+  // forsøk) i stedet for å kaste — derfor sjekker vi .ok eksplisitt her også.
+  if (!zonesRes?.ok) throw new Error(`/api/zones failed`);
+  if (!pricesRes?.ok) throw new Error(`/api/prices/current failed`);
+
+  const zones = await zonesRes.json();
+  const prices = await pricesRes.json();
+  return { zones, prices };
+}
+
+// --- BØLGE 2: valgfrie lag ---------------------------------------------------
+// Henter de fire valgfrie lagene (today, flows, reservoirs, balance) med
+// Promise.allSettled, slik at ETT tregt/dødt endepunkt ikke blokkerer de andre.
+// Kjøres uten å blokkere kjernekartet — loadData kaller den med .then().
+//
+// Skriver de kryssgående cachene (todayPrices/reservoirsData/balanceData) direkte
+// til state — de leses senere av render-/panel-laget. Returnerer flows, som
+// loadData konsumerer lokalt via renderFlows. Hvert lag degraderer grasiøst til
+// {} / null hvis det timer ut eller feiler.
+export async function fetchOptional() {
+  const results = await Promise.allSettled([
     fetchWithRetry(`${API_BASE}/api/prices/today`),
     fetchWithRetry(`${API_BASE}/api/flows/current`),
     fetchWithRetry(`${API_BASE}/api/reservoirs/current`),
     fetchWithRetry(`${API_BASE}/api/balance/current`),
   ]);
 
-  // Trekker ut JSON trygt: kun hvis kallet ble fulfilled OG svaret var ok.
-  // .json() pakkes i try/catch så en korrupt body gir null i stedet for å kaste.
-  const getJson = async (settled) => {
-    if (settled.status === 'fulfilled' && settled.value && settled.value.ok) {
-      try { return await settled.value.json(); } catch { return null; }
-    }
-    return null;
-  };
+  state.todayPrices = (await getJson(results[0])) || {};
+  const flows = await getJson(results[1]);
 
-  const zonesRes = results[0].status === 'fulfilled' ? results[0].value : null;
-  const pricesRes = results[1].status === 'fulfilled' ? results[1].value : null;
-
-  // Kjernelagene må fungere — ellers avbryter vi, og loadData viser feilmelding.
-  if (!zonesRes?.ok) throw new Error(`/api/zones failed`);
-  if (!pricesRes?.ok) throw new Error(`/api/prices/current failed`);
-
-  const zones = await zonesRes.json();
-  const prices = await pricesRes.json();
-
-  // Valgfrie lag: fyll hvis de kom gjennom, ellers tomme fallbacks.
-  state.todayPrices = (await getJson(results[2])) || {};
-  const flows = await getJson(results[3]);
-
-  const resData = await getJson(results[4]);
+  const resData = await getJson(results[2]);
   state.reservoirsData = resData ? resData.areas : null;
 
-  state.balanceData = await getJson(results[5]);
+  state.balanceData = await getJson(results[3]);
 
-  return { zones, prices, flows };
+  return { flows };
 }

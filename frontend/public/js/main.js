@@ -7,7 +7,7 @@ import { createArrowIcon, createFlagIcon, createBatteryIcon } from './icons.js';
 import { PRICE_PAINT, ZONE_LINE_PAINT, CITIES } from './config.js';
 import { map, zonePopup, flowPopup } from './map.js';
 import { state } from './state.js';
-import { fetchAll } from './api.js';
+import { fetchCore, fetchOptional } from './api.js';
 import { buildTimeAxis, computeNowIndex, buildSnapshot, renderTable } from './layers/prices.js';
 import { renderFlows, addFlowLayers } from './layers/flows.js';
 import { addReservoirLayer, renderReservoirSection } from './layers/reservoirs.js';
@@ -25,44 +25,87 @@ let overlayHandlersAttached = false;
 let initialFitDone = false;
 
 
+// ---------------------------------------------------------
+// Pris-render (delt mellom bølge 1 og bølge 2)
+// ---------------------------------------------------------
+// Bygger tidsakse + snapshot, populerer sone-properties (så addOverlays får
+// riktig fyll), og oppdaterer pristabell + slider. Idempotent og kjøres to ganger
+// i den progressive lasten:
+//   - Bølge 1: state.todayPrices er tom → timeAxis tom → snapshot = prices (current).
+//   - Bølge 2: today har landet → timeAxis bygges → snapshot = buildSnapshot(index),
+//     slideren vises, og fyllet re-deriveres fra valgt indeks.
+// Sone-prop-populeringen MÅ skje før renderMap()/addOverlays() (fyllet leser
+// price_ore_kwh), derfor kalles denne alltid før renderMap i loadData.
+function renderPriceLayer(zones, prices) {
+  // Bygg tidsakse fra dagens serie. Hvis vi har en tidsakse, dikteres
+  // sone-prisene av (state.currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
+  buildTimeAxis();
+  state.nowIndex = computeNowIndex();
+
+  let snapshot;
+  if (state.timeAxis.length > 0) {
+    if (!state.userPinned) {
+      state.currentIndex = state.nowIndex;
+    } else {
+      state.currentIndex = Math.min(state.currentIndex, state.timeAxis.length - 1);
+    }
+    snapshot = buildSnapshot(state.currentIndex);
+  } else {
+    // Ingen today-data — bruk /api/prices/current direkte
+    snapshot = prices;
+  }
+
+  // Populer initielle sone-properties slik at addOverlays() får riktig fyll
+  for (const f of zones.features) {
+    const p = snapshot[f.properties.zoneName];
+    if (p && p.price_ore_kwh != null) {
+      f.properties.price_ore_kwh = p.price_ore_kwh;
+      f.properties.price_eur_mwh = p.price_eur_mwh;
+      f.properties.timestamp = p.timestamp;
+    }
+  }
+
+  renderTable(snapshot);
+
+  // Slider-synlighet og UI-oppdatering (slideren vises først når today finnes)
+  toggleSliderVisibility(state.timeAxis.length > 0);
+  updateSliderUI();
+}
+
+
 async function loadData() {
   try {
     const errorDiv = document.getElementById('error'); errorDiv.textContent = '';
-    const { zones, prices, flows } = await fetchAll();
 
-    // Bygg tidsakse fra dagens serie. Hvis vi har en tidsakse, dikteres
-    // sone-prisene av (state.currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
-    buildTimeAxis();
-    state.nowIndex = computeNowIndex();
+    // --- BØLGE 1: kjernekart (zones + prices/current) ---
+    // Kaster hvis kjernen mangler → catch viser "Venter på nettverk...".
+    // Males umiddelbart; venter IKKE på de fire valgfrie lagene.
+    const { zones, prices } = await fetchCore();
+    renderPriceLayer(zones, prices);
+    renderMap(zones);
 
-    let snapshot;
-    if (state.timeAxis.length > 0) {
-      if (!state.userPinned) {
-        state.currentIndex = state.nowIndex;
-      } else {
-        state.currentIndex = Math.min(state.currentIndex, state.timeAxis.length - 1);
-      }
-      snapshot = buildSnapshot(state.currentIndex);
-    } else {
-      // Ingen today-data — bruk /api/prices/current direkte
-      snapshot = prices;
-    }
-
-    // Populer initielle sone-properties slik at addOverlays() får riktig fyll
-    for (const f of zones.features) {
-      const p = snapshot[f.properties.zoneName];
-      if (p && p.price_ore_kwh != null) {
-        f.properties.price_ore_kwh = p.price_ore_kwh;
-        f.properties.price_eur_mwh = p.price_eur_mwh;
-        f.properties.timestamp = p.timestamp;
-      }
-    }
-    renderMap(zones); renderTable(snapshot); renderFlows(flows);
-    if (state.mapLoaded) addReservoirLayer();
-
-    // Slider-synlighet og UI-oppdatering
-    toggleSliderVisibility(state.timeAxis.length > 0);
-    updateSliderUI();
+    // --- BØLGE 2: valgfrie lag (today, flows, reservoirs, balance) ---
+    // Blokkerer IKKE kjernekartet. Ett tregt/dødt ENTSO-E-endepunkt kan ikke
+    // lenger holde kartet på "Laster...". Hvert lag males inn når det er hentet.
+    // fetchOptional() bruker allSettled internt og kaster aldri; .catch er en
+    // defensiv vakt mot at en render-/lag-funksjon i .then skulle kaste.
+    fetchOptional()
+      .then(({ flows }) => {
+        // today kan ha landet → bygg tidsakse + slider på nytt og re-deriver fyll.
+        renderPriceLayer(zones, prices);
+        // Flyt: bygg geojson + skriv state.flowsData (addFlowLayers skjer i addOverlays).
+        renderFlows(flows);
+        // Paneler re-rendres hvis en sone allerede er valgt.
+        if (state.selectedZone) {
+          renderBalanceSection(state.selectedZone);
+          renderReservoirSection(state.selectedZone);
+        }
+        // B1: re-kjør addOverlays slik at flow-/reservoir-lagene attaches nå som
+        // state har data. Idempotent — alle addLayer-kall er getLayer-vaktet, og
+        // addReservoirLayer/addFlowLayers er gated på state.reservoirsData/flowsData.
+        if (state.mapLoaded) addOverlays();
+      })
+      .catch(err => console.error('Valgfrie lag feilet:', err));
   } catch (err) {
     document.getElementById('error').textContent = 'Venter på nettverk...'; console.error(err);
   }
