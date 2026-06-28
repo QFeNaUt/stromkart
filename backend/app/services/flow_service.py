@@ -147,7 +147,7 @@ def get_client() -> EntsoePandasClient:
         token = os.getenv("ENTSOE_API_TOKEN")
         if not token:
             raise RuntimeError("ENTSOE_API_TOKEN mangler i miljøet")
-        _client = EntsoePandasClient(api_key=token)
+        _client = EntsoePandasClient(api_key=token, timeout=REQUEST_TIMEOUT)
     return _client
 
 

@@ -27,6 +27,7 @@ ZONES = ["NO_1", "NO_2", "NO_3", "NO_4", "NO_5"]
 FRESH_TTL = 3600          # 1 time
 STALE_TTL = 86400         # 24 timer
 RATE_LIMIT_BACKOFF = 5    # sekunder
+REQUEST_TIMEOUT = 15      # sekunder — per-request timeout på ENTSO-E-klienten
 
 # Human-readable PSR-navn (slik entsoe-py returnerer dem) -> summary-bøtte.
 # Alt som ikke matcher eksplisitt havner i "annet".
@@ -74,7 +75,7 @@ def _get_client() -> EntsoePandasClient:
     token = os.getenv("ENTSOE_API_TOKEN")
     if not token:
         raise RuntimeError("ENTSOE_API_TOKEN ikke satt")
-    return EntsoePandasClient(api_key=token)
+    return EntsoePandasClient(api_key=token, timeout=REQUEST_TIMEOUT)
 
 
 def _summary_from_detailed(detailed: Dict[str, float]) -> Dict[str, float]:

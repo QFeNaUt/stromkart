@@ -57,7 +57,7 @@ ZONE_CODES = {
 # 'today' cachet lenge fordi day-ahead-priser publiseres én gang per dag
 # (~13:00 CET) og endres ikke etterpå.
 TODAY_TTL_SECONDS = 3600       # 1 time
-ZONE_FETCH_TIMEOUT = 15        # sekunder å vente på hver parallell ENTSO-E-spørring
+ZONE_FETCH_TIMEOUT = 15        # per-request timeout på klienten + maks ventetid i as_completed
 
 # Enkel in-memory cache: {nøkkel: (tidsstempel, data)}
 _cache: dict = {}
@@ -107,7 +107,7 @@ def get_client() -> EntsoePandasClient:
                 "ENTSOE_API_TOKEN er ikke satt. "
                 "Kopier .env.example til .env og fyll inn din token."
             )
-        _client = EntsoePandasClient(api_key=token)
+        _client = EntsoePandasClient(api_key=token, timeout=ZONE_FETCH_TIMEOUT)
     return _client
 
 
