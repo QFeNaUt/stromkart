@@ -33,6 +33,8 @@ import pandas as pd
 import requests
 from entsoe import EntsoePandasClient
 
+from app.services.secret_scrub import scrub_secrets
+
 # --------------------------------------------------------------------------
 # Sone-sentroider (NO1–NO5) — kun brukt for interne forbindelser
 # --------------------------------------------------------------------------
@@ -203,11 +205,11 @@ def _fetch_one_direction(
                 print(f"[flow_service] 429 rate limit for {from_code}→{to_code}, venter 5s og prøver igjen")
                 time.sleep(5)
                 continue
-            print(f"[flow_service] {from_code} → {to_code} feilet (HTTP {status}): {e}")
+            print(f"[flow_service] {from_code} → {to_code} feilet (HTTP {status}): {scrub_secrets(e)}")
             return from_code, to_code, None
 
         except Exception as e:
-            print(f"[flow_service] {from_code} → {to_code} feilet: {e}")
+            print(f"[flow_service] {from_code} → {to_code} feilet: {scrub_secrets(e)}")
             return from_code, to_code, None
 
     # Falt gjennom alle attempts (f.eks. 429 på begge forsøk)

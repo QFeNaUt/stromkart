@@ -14,7 +14,6 @@ Arkitektur:
 """
 import concurrent.futures
 import os
-import re
 import time
 import traceback
 from typing import Optional
@@ -24,27 +23,9 @@ from dotenv import load_dotenv
 from entsoe import EntsoePandasClient
 
 from app.services import norges_bank_service
+from app.services.secret_scrub import scrub_secrets
 
 load_dotenv()
-
-
-# Skrubbing av ENTSO-E-token fra feiltekst før den logges eller returneres.
-# Tokenet sendes som ?securityToken=... i URL-en, og en HTTP-feil fra
-# requests/entsoe-py (401/429/5xx) får med seg hele URL-en — altså tokenet i
-# klartekst. Uten skrubbing havner det i journalctl (traceback) OG i JSON-
-# responsen til frontend (error-dicten propageres rått av prices.py). Vi
-# fjerner både query-parameteren og den rå tokenverdien fra miljøet.
-_SECURITY_TOKEN_RE = re.compile(r"(securityToken=)[^&\s]+", re.IGNORECASE)
-
-
-def _scrub_secrets(text) -> str:
-    s = str(text)
-    s = _SECURITY_TOKEN_RE.sub(r"\1***", s)
-    token = os.getenv("ENTSOE_API_TOKEN")
-    if token and token not in ("", "din_token_her"):
-        s = s.replace(token, "***")
-    return s
-
 
 ZONE_CODES = {
     "NO1": "NO_1",
@@ -145,9 +126,9 @@ def _fetch_zone_today(zone_name: str, code: str, start, end, rate: float) -> tup
     except Exception as e:
         # Skrubb token før BÅDE logging og retur. ENTSO-E-feil (401/429/5xx)
         # bærer hele upstream-URL-en med securityToken i klartekst.
-        safe_msg = _scrub_secrets(e) or "(ingen feilmelding)"
+        safe_msg = scrub_secrets(e) or "(ingen feilmelding)"
         print(f"[entsoe_service] Feil for sone {zone_name} (today): {safe_msg}")
-        print(_scrub_secrets(traceback.format_exc()))
+        print(scrub_secrets(traceback.format_exc()))
         return zone_name, {
             "zone": zone_name,
             "error_type": type(e).__name__,

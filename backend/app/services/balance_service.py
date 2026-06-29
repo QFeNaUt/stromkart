@@ -20,6 +20,8 @@ import pandas as pd
 from entsoe import EntsoePandasClient
 from entsoe.exceptions import NoMatchingDataError
 
+from app.services.secret_scrub import scrub_secrets
+
 logger = logging.getLogger(__name__)
 
 # ----- Konfigurasjon -----
@@ -156,7 +158,7 @@ def _fetch_one_zone(zone: str, start: pd.Timestamp, end: pd.Timestamp) -> Option
         result["load_mw"] = None
         result["load_timestamp"] = None
     except Exception as e:
-        logger.warning(f"[balance] {zone}: load-henting feilet: {e}")
+        logger.warning(f"[balance] {zone}: load-henting feilet: {scrub_secrets(e)}")
         result["load_mw"] = None
         result["load_timestamp"] = None
 
@@ -177,7 +179,7 @@ def _fetch_one_zone(zone: str, start: pd.Timestamp, end: pd.Timestamp) -> Option
         result["generation_mix"] = None
         result["generation_timestamp"] = None
     except Exception as e:
-        logger.warning(f"[balance] {zone}: generation-henting feilet: {e}")
+        logger.warning(f"[balance] {zone}: generation-henting feilet: {scrub_secrets(e)}")
         result["generation_mix"] = None
         result["generation_timestamp"] = None
 
@@ -233,7 +235,7 @@ def fetch_current_balance() -> dict:
                 if res is not None:
                     zones_data[zone] = res
             except Exception as e:
-                logger.error(f"[balance] {zone}: uforventet feil: {e}")
+                logger.error(f"[balance] {zone}: uforventet feil: {scrub_secrets(e)}")
 
     new_data = {
         "zones": zones_data,
