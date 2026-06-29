@@ -112,13 +112,3 @@ def get_zones():
         )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/refresh")
-def refresh_zones():
-    """Tvinger ny nedlasting av GeoJSON (overskriver cache)."""
-    try:
-        data = _fetch_and_cache()
-        return {"status": "ok", "feature_count": len(data["features"])}
-    except (httpx.HTTPError, ValueError) as e:
-        raise HTTPException(status_code=502, detail=str(e))
