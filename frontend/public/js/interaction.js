@@ -7,7 +7,7 @@
 
 import { map, zonePopup, flowPopup } from './map.js';
 import { state } from './state.js';
-import { ZONE_COLORS, ZONE_NAMES, FLOW_COLORS } from './config.js';
+import { ZONE_COLORS, ZONE_NAMES, FLOW_COLORS, CABLE_SPECS } from './config.js';
 import { priceColor } from './layers/prices.js';
 import { renderBalanceSection } from './layers/balance.js';
 import { renderReservoirSection } from './layers/reservoirs.js';
@@ -44,6 +44,18 @@ export function handleFlowHover(e) {
   const color = FLOW_COLORS[p.direction] || FLOW_COLORS.internal;
   const dirLbl = { export: 'Eksport', import: 'Import', internal: 'Internflyt' }[p.direction] || 'Flyt';
 
+  // Tekniske data for HVDC-sjøkabler (slås opp på cable-navnet). Interne
+  // AC-forbindelser har cable=null → ingen spec → uendret popup.
+  // Belastningsgrad regnes dynamisk av øyeblikkets flyt mot kapasiteten.
+  const spec = CABLE_SPECS[p.cable];
+  let specHtml = '';
+  if (spec) {
+    const load = (Number(p.mw) / spec.capacity_mw) * 100;
+    specHtml = `
+      <div class="popup-meta">Kapasitet: ${spec.capacity} · ${spec.voltage}</div>
+      <div class="popup-meta">Belastning: ${load.toFixed(1)} %</div>`;
+  }
+
   flowPopup.setLngLat(e.lngLat).setHTML(`
     <div class="popup-accent" style="background:${color}"></div>
     <div class="popup-body">
@@ -51,7 +63,7 @@ export function handleFlowHover(e) {
       ${p.cable ? `<div class="popup-region">${p.cable}</div>` : ''}
       <div class="popup-zone">${p.from} → ${p.to}</div>
       <div class="popup-price" style="color:${color}">${Number(p.mw).toFixed(0)}<span class="unit">MW</span></div>
-      <div class="popup-subprice">${dirLbl}</div>
+      <div class="popup-subprice">${dirLbl}</div>${specHtml}
     </div>
   `).addTo(map);
 }
@@ -64,7 +76,7 @@ export function handleFlowLeave() {
 export function handleMapClick(e) {
   // Defensiv filtrering: hvis brukeren tapper før alle lag er rendret,
   // unngå å sende lag-IDer som ikke finnes (MapLibre advarer / returnerer tomt).
-  const candidateLayers = ['flows-arrow', 'flows-line', 'reservoirs-layer', 'zones-fill'];
+  const candidateLayers = ['flows-hit', 'flows-arrow', 'flows-line', 'reservoirs-layer', 'zones-fill'];
   const layers = candidateLayers.filter(id => map.getLayer(id));
   if (!layers.length) return;
   const features = map.queryRenderedFeatures(e.point, { layers });

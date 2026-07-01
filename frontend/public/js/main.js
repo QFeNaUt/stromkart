@@ -154,11 +154,12 @@ function addOverlays() {
   }
 
   if (!overlayHandlersAttached) {
-    // Desktop Hover
+    // Desktop Hover — bindes mot det usynlige flows-hit-laget (konstant bredde)
+    // så også tynne, lavt lastede kabler er lette å treffe.
     map.on('mousemove', 'zones-fill', handleZoneHover);
     map.on('mouseleave', 'zones-fill', handleZoneLeave);
-    map.on('mousemove', 'flows-line', handleFlowHover);
-    map.on('mouseleave', 'flows-line', handleFlowLeave);
+    map.on('mousemove', 'flows-hit', handleFlowHover);
+    map.on('mouseleave', 'flows-hit', handleFlowLeave);
 
     // Mobile Click
     map.on('click', handleMapClick);
@@ -180,6 +181,9 @@ function updateOverlayVisibility() {
   if (map.getLayer('flows-arrow')) map.setLayoutProperty('flows-arrow', 'visibility', fV);
   if (map.getLayer('flows-flags-layer')) map.setLayoutProperty('flows-flags-layer', 'visibility', fV);
   if (map.getLayer('flows-highlight')) map.setLayoutProperty('flows-highlight', 'visibility', fV);
+  // flows-hit må følge flyt-synligheten: ellers ville det usynlige treff-laget
+  // fortsatt fange hover/klikk (og vise popup) mens flyt-laget er skrudd av.
+  if (map.getLayer('flows-hit')) map.setLayoutProperty('flows-hit', 'visibility', fV);
 
   const rV = state.reservoirsVisible ? 'visible' : 'none';
   if (map.getLayer('reservoirs-layer')) map.setLayoutProperty('reservoirs-layer', 'visibility', rV);

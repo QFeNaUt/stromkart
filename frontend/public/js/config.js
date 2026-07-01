@@ -53,6 +53,22 @@ export const FLOW_WIDTH = [
 export const FLOW_OPACITY = ['case', ['==', ['get', 'direction'], 'internal'], 0.55, 0.90];
 export const FLOW_OPACITY_STALE = ['case', ['==', ['get', 'direction'], 'internal'], 0.35, 0.50];
 
+// Usynlig treff-lag: konstant bredde så også lavt lastede kabler er lette å
+// treffe (hover/klikk). ~full-last-bredde (FLOW_WIDTH topper på 6.5) + margin.
+export const FLOW_HIT_WIDTH = 8;
+
+// HVDC-sjøkabler — statiske tekniske data for hover-popup. Slås opp på `cable`
+// (visningsstrengen fra flow_service.CONNECTIONS), ikke edge-`id`: interne
+// AC-forbindelser har cable=null og får dermed naturlig ingen spec, og nøkkelen
+// overlever en eventuell sone-endring på en kabel (id ville da endret seg).
+// capacity_mw er tallverdien (for belastningsberegning); capacity er visningstekst.
+export const CABLE_SPECS = {
+  'Skagerrak 1-4':  { capacity_mw: 1700, capacity: '1700 MW', voltage: '250–500 kV' },
+  'NorNed':         { capacity_mw: 700,  capacity: '700 MW',  voltage: '450 kV DC' },
+  'NordLink':       { capacity_mw: 1400, capacity: '1400 MW', voltage: '525 kV DC' },
+  'North Sea Link': { capacity_mw: 1400, capacity: '1400 MW', voltage: '525 kV DC' },
+};
+
 // Produksjonsmiks — ENTSO-E PSR-koder → norske navn og bøtter
 export const PSR_NAME_NO = {
   'Hydro Water Reservoir':           'Vannmagasin',

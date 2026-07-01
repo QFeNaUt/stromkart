@@ -1,6 +1,6 @@
 import { map } from '../map.js';
 import { state } from '../state.js';
-import { FLOW_COLORS, FLOW_WIDTH, FLOW_OPACITY, FLOW_OPACITY_STALE } from '../config.js';
+import { FLOW_COLORS, FLOW_WIDTH, FLOW_OPACITY, FLOW_OPACITY_STALE, FLOW_HIT_WIDTH } from '../config.js';
 
 export function buildFlowGeoJSON(payload) {
   if (!payload || !payload.edges) return { type: 'FeatureCollection', features: [] };
@@ -65,6 +65,12 @@ export function addFlowLayers() {
 
   if (!map.getLayer('flows-line')) map.addLayer({ id: 'flows-line', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['match', ['get', 'direction'], 'export', FLOW_COLORS.export, 'import', FLOW_COLORS.import, 'internal', FLOW_COLORS.internal, FLOW_COLORS.internal], 'line-width': FLOW_WIDTH } }, beforeId);
   if (!map.getLayer('flows-arrow')) map.addLayer({ id: 'flows-arrow', type: 'symbol', source: 'flows', layout: { 'symbol-placement': 'line-center', 'icon-image': 'flow-arrow', 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-size': ['interpolate', ['linear'], ['coalesce', ['get', 'mw'], 0], 0, 0.55, 400, 0.85, 1400, 1.20] } }, beforeId);
+
+  // Usynlig treff-lag med konstant bredde — ligger øverst i flyt-stabelen så
+  // også lavt lastede (tynne) kabler er lette å treffe. line-opacity: 0 er
+  // fortsatt hit-testbar i MapLibre (til forskjell fra visibility: none).
+  // Hover-/klikk-handlerne peker mot dette laget i stedet for det tynne flows-line.
+  if (!map.getLayer('flows-hit')) map.addLayer({ id: 'flows-hit', type: 'line', source: 'flows', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': FLOW_HIT_WIDTH } }, beforeId);
 
   const lineOpacity = state.flowsIsStale ? FLOW_OPACITY_STALE : FLOW_OPACITY;
   map.setPaintProperty('flows-line', 'line-opacity', lineOpacity);
