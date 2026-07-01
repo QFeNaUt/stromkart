@@ -91,9 +91,11 @@ CONNECTIONS = [
     # for å bøye kabelen pent rundt landmasser. NorNed har flere punkter
     # som følger den faktiske traséen via Norskerenna og sørover gjennom
     # Nordsjøen, ned til Wadden-havet og Eemshaven.
-    {"a": "NO_2", "b": "DK_1", "kind": "external", "cable": "Skagerrak",
-     "a_point":    [8.05, 58.13],   "b_point": [9.59, 56.49],
-     "sea_points": [[8.70, 57.50]]},
+    {"a": "NO_2", "b": "DK_1", "kind": "external", "cable": "Skagerrak 1-4",
+     # Rett linje mellom omformerstasjonene (ingen mellompunkt) — ryddet opp
+     # for færre knekkpunkter. Norsk ende: Kristiansand/Crosser. Dansk ende: Tjele.
+     "a_point":    [8.167500, 58.129167],   "b_point": [9.066278, 57.126167],
+     "sea_points": []},
     {"a": "NO_2", "b": "DE_LU", "kind": "external", "cable": "NordLink",
      "a_point":    [6.7525, 58.6676],   "b_point": [9.38, 53.93],
      "sea_points": [
@@ -104,29 +106,24 @@ CONNECTIONS = [
          [8.7276, 53.9726]   # Tyskebukta/inn mot land
      ]},
     {"a": "NO_2", "b": "GB", "kind": "external", "cable": "North Sea Link",
-     "a_point":    [6.83, 59.49],   "b_point": [-1.51, 55.13],
+     # Ryddet opp til 5 knekkpunkter: 3 på norsk side (Kvilldal + 2), 2 på
+     # engelsk side (Blyth). Lang rett linje mellom siste norske punkt og
+     # første britiske punkt gjennom Nordsjøen.
+     "a_point":    [6.654306, 59.530306],   "b_point": [-1.540639, 55.146333],
      "sea_points": [
-         [6.5024, 59.5390],  # Landtak Norge
-         [6.1527, 59.3826],  # Fjord/kyst
-         [5.3989, 59.0981],  # Kyst/Nordsjøen
-         [1.5561, 57.1176],  # Midt-Nordsjøen
-         [0.9738, 56.3594],  # Midt-Nordsjøen
-         [-0.1617, 55.9884], # Midt-Nordsjøen
-         [-0.4160, 55.6245], # Midt-Nordsjøen
-         [-1.0617, 55.2515], # Nærmer seg UK
-         [-1.5434, 55.1223]  # Landtak UK
+         [6.597361, 59.558972],   # Norsk side
+         [6.265778, 59.513500],   # Siste norske punkt (rett linje herfra til UK)
+         [-1.430056, 55.146722],  # Første britiske punkt (Blyth)
      ]},
     {"a": "NO_2", "b": "NL", "kind": "external", "cable": "NorNed",
-     "a_point":    [6.79, 58.31],   "b_point": [6.83, 53.45],
-     # Trasé approksimert etter 4C Offshore Interactive Map: nesten rett
-     # sørover fra Feda med en svak vestlig drift gjennom Nordsjøen, før
-     # innsving østover mot Eemshaven.
+     # Ryddet opp: norsk side har nå kun Feda-endepunktet + ett punkt nordvest
+     # for Lista fyr, som kobles direkte mot de to gjenværende nederlandske
+     # knekkpunktene og videre til Eemshaven.
+     "a_point":    [6.890083, 58.278861],   "b_point": [6.8640152, 53.4348021],
      "sea_points": [
-         [6.50, 57.50],  # Ut fra Feda, svak vestlig sving
-         [6.00, 56.00],  # Nordlig Nordsjøen
-         [5.50, 55.00],  # Midt-Nordsjøen
-         [5.50, 54.00],  # Sørlig Nordsjøen
-         [6.00, 53.65],  # Innsving mot Eemshaven
+         [6.501833, 58.149667],  # NV for Lista fyr
+         [5.50, 54.00],          # Sørlig Nordsjøen
+         [6.00, 53.65],          # Innsving mot Eemshaven
      ]},
 ]
 
