@@ -1,0 +1,20 @@
+{
+  "name": "stromkartet-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5500",
+    "build": "vite build",
+    "preview": "vite preview --port 5500"
+  },
+  "dependencies": {
+    "maplibre-gl": "^4.7.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.3",
+    "vite": "^8.1.3"
+  }
+}

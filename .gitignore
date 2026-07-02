@@ -35,3 +35,6 @@ Thumbs.db
 # Lokale arkiver og backups
 *.zip
 *.bak
+
+frontend/node_modules/
+frontend/dist/

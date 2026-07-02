@@ -1,6 +1,9 @@
 // ---------------------------------------------------------
 // map.js — MapLibre-instansen og kart-tilknyttede singletons
+// (MapLibre importeres som ESM fra npm-pakken under Vite)
 // ---------------------------------------------------------
+
+import maplibregl from 'maplibre-gl';
 
 export const map = new maplibregl.Map({
   container: 'map',
