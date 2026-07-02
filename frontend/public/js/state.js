@@ -31,6 +31,7 @@ export const state = {
   flowsIsStale: false,
   reservoirsVisible: true,
   balanceVisible: true,
+  plantsVisible: false,   // Kraftverk-laget er av som standard (69 markører — opt-in)
 
   // Valg (interaksjon skriver, panelene leser)
   selectedZone: null,   // aktiv sone i sheet-/panel-konteksten

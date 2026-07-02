@@ -115,11 +115,16 @@ export const BUCKET_HEX = {
 };
 export const BUCKET_ORDER = ['vann', 'vind', 'sol', 'termisk', 'fossile', 'annet'];
 
+// Kraftverk-markører — farge per type (matcher BUCKET_HEX vann/vind) + norske
+// typenavn. Brukes av plants-laget (ikoner), popup-aksent og tegnforklaring.
+export const PLANT_COLORS = { magasin: '#3b82f6', elv: '#2DD4BF', vind: '#22c55e' };
+export const PLANT_TYPE_LABEL = { magasin: 'Magasinkraftverk', elv: 'Elvekraftverk', vind: 'Vindkraftverk' };
+
 // Tidslinje
 export const PLAY_SPEED_MS = 200;  // ~19 sek per døgn, ~38 sek for 2 døgn
 
 // Forklaringslag — kuratert faktasett for inline «i», Del A og Del B
-export const CONCEPT_ORDER = ['spotpris', 'prissone', 'kraftflyt', 'hvdc', 'magasinfylling', 'mtu', 'ore_kwh', 'eks_mva'];
+export const CONCEPT_ORDER = ['spotpris', 'prissone', 'kraftflyt', 'hvdc', 'magasinfylling', 'kraftverk', 'mtu', 'ore_kwh', 'eks_mva'];
 export const CONCEPTS = {
   spotpris: {
     label: 'Spotpris',
@@ -140,6 +145,10 @@ export const CONCEPTS = {
   magasinfylling: {
     label: 'Magasinfylling',
     body: 'Hvor mye vann som er lagret i vannkraftmagasinene, målt i prosent av full kapasitet. I et vannkraftland som Norge er lagret vann det samme som lagret strøm – det er batteriet vårt. Fyllingsgraden endrer seg med årstidene: magasinene fylles opp av regn og smeltet snø om våren og sommeren, og tømmes gjennom vinteren. Derfor sier prosenten lite alene – 50 % fylling kan være kritisk lavt i november, men helt normalt i mai. Appen sammenligner derfor alltid dagens nivå med hva som er historisk normalt for akkurat denne uken.'
+  },
+  kraftverk: {
+    label: 'Kraftverk',
+    body: 'De største vann- og vindkraftverkene i Norge, vist som markører der størrelsen speiler installert effekt (MW) – arealet vokser med ytelsen, så et dobbelt så stort anlegg får en merkbart større sirkel. Fargen viser typen: blå for magasinkraft (vannkraft med reguleringsmagasin), turkis for elvekraft (vannkraft i elveløp uten stort magasin) og grønn for vindkraft. Noen anlegg som ligger svært tett – som de to Sima-stasjonene eller vindparkene i Bjerkreimsklyngen – er slått sammen til én markør. Trykk på en markør for navn, effekt og årsproduksjon.'
   },
   mtu: {
     label: 'MTU',
@@ -177,6 +186,12 @@ export const KEY_ITEMS = [
     concept: 'magasinfylling', swatch: '<div class="sw-battery"><span></span></div>',
     label: 'Batteri-ikoner (magasinfylling)',
     desc: 'Vises som batterier for å illustrere sonens lagrede energi. Høyden på det blå feltet viser hvor fulle magasinene er i prosent. De er bevisst farget nøytralt blå – i stedet for rød, gul eller grønn – fordi et lavt nivå om våren kan være like normalt som et høyt nivå om høsten.'
+  },
+  {
+    concept: 'kraftverk',
+    swatch: '<div style="display:flex;gap:3px;align-items:center;justify-content:center"><span style="width:9px;height:9px;border-radius:50%;background:#3b82f6"></span><span style="width:9px;height:9px;border-radius:50%;background:#2DD4BF"></span><span style="width:9px;height:9px;border-radius:50%;background:#22c55e"></span></div>',
+    label: 'Kraftverk-markører',
+    desc: 'De største vann- og vindkraftverkene, skalert etter installert effekt. Blå = magasinkraft, turkis = elvekraft, grønn = vindkraft. Slås på i Kartlag.'
   },
   {
     concept: 'hvdc', swatch: '<div class="sw-flag"><i style="height:50%;background:#cf2e2e"></i><i style="height:50%;background:#3b6fb0"></i></div>',

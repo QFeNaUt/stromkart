@@ -5,9 +5,9 @@
 // derimot disse handlerne og binder dem i addOverlays. Kanten main → interaction
 // er dermed enveis og asyklisk.
 
-import { map, zonePopup, flowPopup } from './map.js';
+import { map, zonePopup, flowPopup, plantPopup } from './map.js';
 import { state } from './state.js';
-import { ZONE_COLORS, ZONE_NAMES, FLOW_COLORS, CABLE_SPECS } from './config.js';
+import { ZONE_COLORS, ZONE_NAMES, FLOW_COLORS, CABLE_SPECS, PLANT_COLORS, PLANT_TYPE_LABEL } from './config.js';
 import { priceColor } from './layers/prices.js';
 import { renderBalanceSection } from './layers/balance.js';
 import { renderReservoirSection } from './layers/reservoirs.js';
@@ -72,11 +72,36 @@ export function handleFlowLeave() {
   if (window.innerWidth > 768) { map.getCanvas().style.cursor = ''; flowPopup.remove(); }
 }
 
+export function handlePlantHover(e) {
+  if (window.innerWidth <= 768) return; // Desktop kun
+  map.getCanvas().style.cursor = 'pointer';
+  const p = e.features[0].properties;
+  const color = PLANT_COLORS[p.type] || '#9b91b8';
+  const typeLbl = PLANT_TYPE_LABEL[p.type] || 'Kraftverk';
+
+  plantPopup.setLngLat(e.lngLat).setHTML(`
+    <div class="popup-accent" style="background:${color}"></div>
+    <div class="popup-body">
+      <div class="popup-region">${p.name}</div>
+      <div class="popup-zone">${typeLbl} · ${p.zone}</div>
+      <div class="popup-price" style="color:${color}">${Number(p.mw).toFixed(0)}<span class="unit">MW</span></div>
+      ${p.gwh != null ? `<div class="popup-subprice">${Number(p.gwh).toLocaleString('nb-NO')} GWh/år</div>` : ''}
+      ${p.municipality ? `<div class="popup-meta">${p.municipality}</div>` : ''}
+      ${p.owner ? `<div class="popup-meta">${p.owner}</div>` : ''}
+      ${p.members ? `<div class="popup-meta">Slått sammen av: ${p.members}</div>` : ''}
+    </div>
+  `).addTo(map);
+}
+
+export function handlePlantLeave() {
+  if (window.innerWidth > 768) { map.getCanvas().style.cursor = ''; plantPopup.remove(); }
+}
+
 // Klikk-håndtering (mobil + desktop)
 export function handleMapClick(e) {
   // Defensiv filtrering: hvis brukeren tapper før alle lag er rendret,
   // unngå å sende lag-IDer som ikke finnes (MapLibre advarer / returnerer tomt).
-  const candidateLayers = ['flows-hit', 'flows-arrow', 'flows-line', 'reservoirs-layer', 'zones-fill'];
+  const candidateLayers = ['plants-layer', 'flows-hit', 'flows-arrow', 'flows-line', 'reservoirs-layer', 'zones-fill'];
   const layers = candidateLayers.filter(id => map.getLayer(id));
   if (!layers.length) return;
   const features = map.queryRenderedFeatures(e.point, { layers });
@@ -110,6 +135,19 @@ export function handleMapClick(e) {
 
     map.setFilter('flows-highlight', ['==', ['get', 'id'], p.id]);
     map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
+    state.selectedZone = null;
+    state.selectedView = null;
+    renderBalanceSection(null);
+    renderReservoirSection(null);
+  }
+  else if (f.layer.id === 'plants-layer') {
+    const typeLbl = PLANT_TYPE_LABEL[p.type] || 'Kraftverk';
+    const gwhTxt = p.gwh != null ? ` · ${Number(p.gwh).toLocaleString('nb-NO')} GWh/år` : '';
+    titleEl.textContent = p.name;
+    descEl.textContent = `${typeLbl} · ${Math.round(p.mw)} MW${gwhTxt}${p.zone ? ` · ${p.zone}` : ''}`;
+
+    map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], '']);
+    map.setFilter('flows-highlight', ['==', ['get', 'id'], '']);
     state.selectedZone = null;
     state.selectedView = null;
     renderBalanceSection(null);

@@ -5,18 +5,20 @@
 
 import { createArrowIcon, createFlagIcon, createBatteryIcon } from './icons.js';
 import { PRICE_PAINT, ZONE_LINE_PAINT, CITIES } from './config.js';
-import { map, zonePopup, flowPopup } from './map.js';
+import { map, zonePopup, flowPopup, plantPopup } from './map.js';
 import { state } from './state.js';
 import { fetchCore, fetchOptional } from './api.js';
 import { buildTimeAxis, computeNowIndex, buildSnapshot, renderTable } from './layers/prices.js';
 import { renderFlows, addFlowLayers } from './layers/flows.js';
 import { addReservoirLayer, renderReservoirSection } from './layers/reservoirs.js';
 import { renderBalanceSection } from './layers/balance.js';
+import { addPlantsLayer } from './layers/plants.js';
 import { initSheet } from './ui/sheet.js';
 import { initSlider, updateSliderUI, toggleSliderVisibility } from './ui/slider.js';
 import { initHelp } from './ui/help.js';
 import {
   handleZoneHover, handleZoneLeave, handleFlowHover, handleFlowLeave,
+  handlePlantHover, handlePlantLeave,
   handleMapClick, clearMobileSelection, initInteraction,
 } from './interaction.js';
 
@@ -147,6 +149,7 @@ function addOverlays() {
 
   if (state.flowsData) addFlowLayers();
   if (state.reservoirsData) addReservoirLayer();
+  addPlantsLayer();   // statiske data → alltid; idempotent (getLayer-vaktet)
   updateOverlayVisibility();
   if (state.selectedZone) {
     renderBalanceSection(state.selectedZone);
@@ -160,6 +163,8 @@ function addOverlays() {
     map.on('mouseleave', 'zones-fill', handleZoneLeave);
     map.on('mousemove', 'flows-hit', handleFlowHover);
     map.on('mouseleave', 'flows-hit', handleFlowLeave);
+    map.on('mousemove', 'plants-layer', handlePlantHover);
+    map.on('mouseleave', 'plants-layer', handlePlantLeave);
 
     // Mobile Click
     map.on('click', handleMapClick);
@@ -187,6 +192,9 @@ function updateOverlayVisibility() {
 
   const rV = state.reservoirsVisible ? 'visible' : 'none';
   if (map.getLayer('reservoirs-layer')) map.setLayoutProperty('reservoirs-layer', 'visibility', rV);
+
+  const pV = state.plantsVisible ? 'visible' : 'none';
+  if (map.getLayer('plants-layer')) map.setLayoutProperty('plants-layer', 'visibility', pV);
 }
 
 function syncToggle(idBase, visible) {
@@ -247,6 +255,7 @@ export function initApp() {
     // Re-render: viser/skjuler seksjonen basert på toggle + om sone er valgt.
     renderBalanceSection(state.selectedZone);
   });
+  bindToggle('kraftverk', v => { state.plantsVisible = v; if (!v) plantPopup.remove(); });
 
   // Hent data + poll hvert 5. min
   loadData(); setInterval(loadData, 5 * 60 * 1000);
