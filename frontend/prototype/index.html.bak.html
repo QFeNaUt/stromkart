@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Strømkart</title>
+  <meta name="description" content="Sanntid spotpris, kraftflyt og magasinfylling for Norges fem prisområder." />
+
+  <!-- Open Graph (Facebook, Messenger, Slack, LinkedIn) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://stromkart.no/" />
+  <meta property="og:title" content="Strømkart" />
+  <meta property="og:description" content="Sanntid spotpris, kraftflyt og magasinfylling for Norges fem prisområder." />
+  <meta property="og:locale" content="nb_NO" />
+  <meta property="og:image" content="https://stromkart.no/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Strømkartet — sanntid spotpris og kraftflyt for Norge" />
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Strømkart" />
+  <meta name="twitter:description" content="Sanntid spotpris, kraftflyt og magasinfylling for Norges fem prisområder." />
+  <meta name="twitter:image" content="https://stromkart.no/og-image.png" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <style>
+    /* ---------- Grunntema ----------------------------------- */
+    :root {
+      --bg:        #0d1117;
+      --panel:     rgba(22, 27, 34, 0.92);
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --text-dim:  #8b949e;
+      --accent:    #58a6ff;
+
+      /* Pris-gradient (lav → høy) */
+      --c-low:    #10b981;
+      --c-mid:    #eab308;
+      --c-high:   #f97316;
+      --c-vhigh:  #dc2626;
+
+      /* Sonefarger */
+      --zone-no1: #7cc4e8;
+      --zone-no2: #7c8ee8;
+      --zone-no3: #a07ce8;
+      --zone-no4: #d67ce8;
+      --zone-no5: #e87cc4;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); touch-action: manipulation; overflow: hidden; }
+    body {
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      font-feature-settings: "tnum";
+    }
+
+    #map { position: absolute; inset: 0; }
+
+    /* ---------- Paneler (Desktop) --------------------------- */
+    .panel {
+      position: absolute;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 18px;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+
+    .panel h1 { margin: 0 0 4px 0; font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+    .subtitle {
+      color: var(--text-dim); font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 14px;
+    }
+
+    #info-stack {
+      position: absolute; top: 16px; left: 16px; z-index: 10;
+      display: flex; flex-direction: column; gap: 10px;
+      max-width: 340px;
+    }
+    #info-stack .panel { position: static; }
+    #info { min-width: 260px; }
+    #desktop-balance { min-width: 280px; }
+    #desktop-balance.hidden { display: none; }
+    #desktop-balance .balance-title {
+      margin: 0 0 4px 0; font-size: 15px; font-weight: 600; letter-spacing: 0.2px;
+    }
+    #desktop-balance .balance-subtitle { margin-bottom: 12px; }
+    #desktop-reservoir { min-width: 280px; }
+    #desktop-reservoir.hidden { display: none; }
+    #desktop-reservoir .reservoir-title {
+      margin: 0 0 4px 0; font-size: 15px; font-weight: 600; letter-spacing: 0.2px;
+    }
+    #desktop-reservoir .reservoir-subtitle { margin-bottom: 12px; }
+    #legend { bottom: 16px; left: 16px; min-width: 220px; }
+    #controls { top: 96px; right: 16px; padding: 8px 10px; min-width: 160px; }
+    #controls .subtitle { margin-bottom: 6px; }
+
+    .layer-toggle {
+      display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 5px 8px;
+      cursor: pointer; user-select: none; color: var(--text); border-radius: 3px; transition: background 120ms ease;
+    }
+    .layer-toggle:hover { background: rgba(255, 255, 255, 0.05); }
+    .layer-toggle input { margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+    /* ---------- Pris-tabell (Delt) -------------------------- */
+    .prices-table { width: 100%; border-collapse: collapse; }
+    .prices-table td { padding: 6px 0; font-variant-numeric: tabular-nums; }
+    .prices-table tr + tr td { border-top: 1px solid #21262d; }
+    .prices-table .zone { display: flex; align-items: center; gap: 8px; color: var(--text); }
+    .prices-table .swatch { display: inline-block; width: 3px; height: 14px; border-radius: 1px; }
+    .prices-table .price { text-align: right; color: var(--text); font-weight: 500; }
+    .prices-table .unit { color: var(--text-dim); margin-left: 4px; font-weight: 400; }
+    .prices-table .subprice { color: var(--text-dim); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; margin-top: 1px; }
+
+    /* ---------- Legend (Delt) ------------------------------ */
+    .legend-bar {
+      height: 10px; border-radius: 2px;
+      background: linear-gradient(to right, var(--c-low) 0%, var(--c-mid) 33%, var(--c-high) 67%, var(--c-vhigh) 100%);
+    }
+    .legend-labels { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .legend-note { margin-top: 8px; font-size: 10.5px; color: var(--text-dim); letter-spacing: 0.2px; }
+
+    /* ---------- Desktop Tooltip ---------------------------- */
+    .maplibregl-popup-content {
+      background: var(--panel) !important; color: var(--text) !important; border: 1px solid var(--border);
+      border-radius: 6px; padding: 0 !important; font-family: inherit; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      overflow: hidden; min-width: 220px;
+    }
+    .maplibregl-popup-tip { display: none; }
+    .popup-accent { height: 3px; width: 100%; }
+    .popup-body { padding: 10px 12px 11px 12px; }
+    .popup-region { font-size: 12px; color: var(--text-dim); letter-spacing: 0.3px; }
+    .popup-zone { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .popup-price { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.2px; }
+    .popup-price .unit { color: var(--text-dim); font-size: 11px; font-weight: 400; margin-left: 4px; }
+    .popup-subprice { color: var(--text-dim); font-size: 11px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+    .popup-meta { color: var(--text-dim); font-size: 10.5px; margin-top: 6px; letter-spacing: 0.2px; }
+    .popup-stale { color: #f59e0b; font-size: 11px; font-weight: 600; margin-bottom: 6px; letter-spacing: 0.2px; }
+    .popup-sparkline { display: block; width: 100%; height: 38px; margin-top: 8px; overflow: visible; }
+    .status-err { color: #f85149; font-size: 11px; margin-top: 8px; }
+
+    /* ---------- Skalaviser --------------------------------- */
+    .maplibregl-ctrl-scale {
+      background-color: rgba(22, 27, 34, 0.85) !important; border: 1px solid var(--border) !important;
+      border-top: none !important; color: var(--text-dim) !important; font-size: 11px; padding: 2px 8px;
+    }
+    .pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--c-low); margin-right: 6px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+    /* ---------- Mobile Bottom Sheet ------------------------ */
+    #bottom-sheet { display: none; }
+
+    @media (max-width: 768px) {
+      /* Skjul desktop UI */
+      #info, #legend, #controls, #info-stack { display: none !important; }
+      .maplibregl-popup { display: none !important; }
+      /* Flytt skalaviser opp fra bunnen */
+      .maplibregl-ctrl-bottom-right { bottom: 90px !important; transition: bottom 0.3s ease; }
+
+      /* Bunnsheet struktur */
+      #bottom-sheet {
+        display: flex; flex-direction: column; position: absolute; bottom: 0; left: 0; right: 0;
+        height: 100vh;  /* Fallback for eldre nettlesere */
+        height: 100dvh; /* iOS Safari / Android Chrome: stabil med dynamisk adresselinje */
+        padding-top: env(safe-area-inset-top); /* respekter iPhone-notch i full-state */
+        background: var(--panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border-top: 1px solid var(--border); border-radius: 20px 20px 0 0;
+        z-index: 100; box-shadow: 0 -8px 32px rgba(0,0,0,0.6);
+        /* Will be translated via JS */
+        transform: translateY(100%);
+        touch-action: none; /* Styrer swipe i containeren manuelt */
+      }
+      .sheet-handle-wrap {
+        padding: 10px; display: flex; justify-content: center; cursor: grab; flex-shrink: 0;
+      }
+      .sheet-handle { width: 40px; height: 5px; background: #4b5563; border-radius: 3px; }
+      
+      .sheet-content {
+        padding: 0 20px 20px; overflow-y: auto; flex-grow: 1; touch-action: pan-y;
+      }
+
+      /* Context Header for mobil tap */
+      #sheet-context {
+        padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--border);
+      }
+      #sheet-context-title { margin: 0 0 4px 0; font-size: 18px; font-weight: 600; }
+      #sheet-context-desc { font-size: 14px; color: var(--text-dim); }
+
+      /* Seksjoner inni sheetet */
+      .sheet-section { margin-bottom: 18px; }
+      .sheet-section .subtitle { margin-bottom: 12px; }
+    }
+
+    /* ---------- Forbruk og produksjon (balance) ----------- */
+    .balance-section { /* arver .sheet-section */ }
+    .balance-section.hidden { display: none; }
+    .balance-stale-banner {
+      display: none; margin-bottom: 8px; padding: 6px 10px;
+      background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 6px; font-size: 12px; color: #fbbf24;
+    }
+    .balance-stale-banner.visible { display: block; }
+    .balance-numbers {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      font-size: 13px; font-variant-numeric: tabular-nums;
+      margin-bottom: 10px;
+    }
+    .balance-numbers .stat { display: flex; flex-direction: column; gap: 2px; }
+    .balance-numbers .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+    .balance-numbers .stat .value { font-size: 15px; font-weight: 600; color: var(--text); }
+    .balance-numbers .stat .value.pos { color: #22c55e; }
+    .balance-numbers .stat .value.neg { color: #f97316; }
+    .balance-bar {
+      display: flex; width: 100%; height: 14px; border-radius: 4px;
+      overflow: hidden; background: #21262d; margin-bottom: 12px;
+    }
+    .balance-bar .seg { height: 100%; }
+    .balance-bar .seg.vann    { background: #3b82f6; }
+    .balance-bar .seg.vind    { background: #22c55e; }
+    .balance-bar .seg.sol     { background: #eab308; }
+    .balance-bar .seg.termisk { background: #f97316; }
+    .balance-bar .seg.fossile { background: #8F5342; }
+    .balance-bar .seg.annet   { background: #737373; }
+    .balance-detail {
+      display: flex; flex-direction: column; gap: 4px;
+      font-size: 12.5px; font-variant-numeric: tabular-nums;
+    }
+    .balance-detail .row {
+      display: grid; grid-template-columns: 14px 1fr auto auto;
+      align-items: center; gap: 8px; padding: 3px 0;
+    }
+    .balance-detail .row .dot {
+      width: 10px; height: 10px; border-radius: 2px;
+    }
+    .balance-detail .row .name { color: var(--text); }
+    .balance-detail .row .mw { color: var(--text-dim); }
+    .balance-detail .row .pct { color: var(--text-dim); min-width: 42px; text-align: right; }
+    .balance-meta {
+      margin-top: 10px; font-size: 11px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Reservoir-panel (magasinfylling) ---------- */
+    .reservoir-section { /* arver .sheet-section */ }
+    .reservoir-section.hidden { display: none; }
+    .reservoir-stale-banner {
+      display: none; margin-bottom: 8px; padding: 6px 10px;
+      background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 6px; font-size: 12px; color: #fbbf24;
+    }
+    .reservoir-stale-banner.visible { display: block; }
+    .reservoir-back {
+      background: none; border: none; color: var(--accent);
+      font: inherit; font-size: 12.5px; padding: 0;
+      margin: 0 0 10px 0; cursor: pointer; text-align: left;
+      display: inline-block;
+    }
+    .reservoir-back:hover { text-decoration: underline; }
+    .reservoir-headline {
+      display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px;
+      margin: 6px 0 4px 0;
+    }
+    .reservoir-headline .pct {
+      font-size: 22px; font-weight: 600; color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .reservoir-headline .delta {
+      font-size: 12px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+    .reservoir-headline .delta.pos { color: #22c55e; }
+    .reservoir-headline .delta.neg { color: #f97316; }
+    .reservoir-envelope {
+      position: relative; height: 22px; margin: 14px 0 4px 0;
+    }
+    .reservoir-envelope .track {
+      position: absolute; top: 10px; left: 0; right: 0; height: 4px;
+      background: rgba(255,255,255,0.10); border-radius: 2px;
+    }
+    .reservoir-envelope .median-tick {
+      position: absolute; top: 6px; width: 2px; height: 12px;
+      background: rgba(255,255,255,0.55); transform: translateX(-1px);
+    }
+    .reservoir-envelope .now-marker {
+      position: absolute; top: 5px; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--accent);
+      border: 2px solid var(--bg); transform: translateX(-50%);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .reservoir-envelope-meta {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums; margin-top: 4px;
+    }
+    .reservoir-envelope-meta .end-median { color: var(--text-dim); }
+    .reservoir-top-title {
+      margin-top: 16px; margin-bottom: 8px;
+      font-size: 11px; letter-spacing: 0.6px;
+      text-transform: uppercase; color: var(--text-dim);
+    }
+    .reservoir-top-list { display: flex; flex-direction: column; gap: 9px; }
+    .reservoir-top-list .item .row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 8px; font-size: 13px;
+    }
+    .reservoir-top-list .item .name { color: var(--text); font-weight: 500; }
+    .reservoir-top-list .item .volume {
+      color: var(--text-dim); font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .reservoir-top-list .item .note {
+      font-size: 11.5px; color: var(--text-dim); margin-top: 1px;
+    }
+    .reservoir-meta {
+      margin-top: 14px; padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      font-size: 11px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Time Slider -------------------------------- */
+    .time-slider-wrap {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(540px, calc(100vw - 32px));
+      padding: 12px 16px 10px;
+      z-index: 10;
+    }
+    .time-slider-wrap.hidden { display: none; }
+
+    .time-slider-top {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+    }
+    .time-slider-btn {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 5px 11px; font-size: 12px; cursor: pointer;
+      font-family: inherit; font-variant-numeric: tabular-nums;
+      transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+      min-height: 28px;
+    }
+    .time-slider-btn:hover { background: rgba(255, 255, 255, 0.05); border-color: var(--accent); }
+    .time-slider-btn:active { background: rgba(88, 166, 255, 0.15); }
+    .time-slider-btn.at-now { opacity: 0.35; cursor: default; }
+    .time-slider-btn.at-now:hover { background: transparent; border-color: var(--border); }
+    .time-slider-play { min-width: 36px; font-size: 13px; }
+
+    .time-slider-label {
+      flex: 1; text-align: center; font-size: 13px;
+      color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: 0.2px;
+    }
+    .time-slider-label .live-dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--c-low); margin-right: 6px; vertical-align: middle;
+      animation: pulse 2s infinite;
+    }
+
+    .time-slider-track-wrap {
+      position: relative; height: 22px; display: flex; align-items: center;
+    }
+    .time-slider-range {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; background: #21262d;
+      border-radius: 2px; outline: none; margin: 0;
+      position: relative; z-index: 3; cursor: pointer;
+    }
+    .time-slider-range::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg);
+      cursor: grab; box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+    .time-slider-range::-webkit-slider-thumb:active { cursor: grabbing; }
+    .time-slider-range::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg);
+      cursor: grab; box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+
+    /* "Nå"-markør (hvit vertikal linje på track) */
+    .time-slider-now-marker {
+      position: absolute; top: 3px; bottom: 3px;
+      width: 2px; background: rgba(255, 255, 255, 0.65);
+      border-radius: 1px; pointer-events: none; z-index: 2;
+      transform: translateX(-50%);
+      display: none;
+    }
+    .time-slider-now-marker.visible { display: block; }
+
+    /* Døgnskille-markør (amber) */
+    .time-slider-day-marker {
+      position: absolute; top: 0; bottom: 0;
+      width: 1.5px; background: #f59e0b;
+      pointer-events: none; z-index: 2;
+      transform: translateX(-50%);
+      display: none;
+    }
+    .time-slider-day-marker.visible { display: block; }
+
+    .time-slider-ticks {
+      display: flex; justify-content: space-between; margin-top: 6px;
+      font-size: 10px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums; letter-spacing: 0.4px;
+      padding: 0 2px;
+    }
+    .time-slider-ticks span { width: 0; text-align: center; transform: translateX(-50%); }
+    .time-slider-ticks span:first-child { transform: translateX(0); text-align: left; }
+    .time-slider-ticks span:last-child { transform: translateX(-100%); text-align: right; }
+
+    /* Minimer-knapp øverst til høyre på panelet (kun synlig når expanded) */
+    .time-slider-collapse {
+      position: absolute; top: 4px; right: 6px;
+      width: 22px; height: 22px; padding: 0;
+      background: transparent; color: var(--text-dim);
+      border: none; font-size: 16px; line-height: 1;
+      cursor: pointer; border-radius: 3px;
+      font-family: inherit;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 4;
+    }
+    .time-slider-collapse:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+
+    /* Kompakt collapsed-pille (kun synlig når collapsed) */
+    .time-slider-expand {
+      display: none;
+      align-items: center; gap: 10px;
+      width: 100%; padding: 4px 6px;
+      background: transparent; border: none;
+      color: var(--text); font-family: inherit;
+      font-size: 13px; font-variant-numeric: tabular-nums;
+      cursor: pointer; border-radius: 4px;
+      letter-spacing: 0.2px;
+    }
+    .time-slider-expand:hover { background: rgba(255, 255, 255, 0.05); }
+    .time-slider-expand .collapsed-time-label { flex: 1; text-align: center; }
+    .time-slider-expand .chevron { color: var(--text-dim); font-size: 14px; line-height: 1; }
+
+    /* Collapsed-state: skjul full UI, vis kompakt pille */
+    .time-slider-wrap.collapsed .time-slider-collapse,
+    .time-slider-wrap.collapsed .time-slider-top,
+    .time-slider-wrap.collapsed .time-slider-track-wrap,
+    .time-slider-wrap.collapsed .time-slider-ticks { display: none; }
+    .time-slider-wrap.collapsed .time-slider-expand { display: flex; }
+    .time-slider-wrap.collapsed {
+      padding: 4px 8px;
+      width: auto; min-width: 180px;
+    }
+
+    /* Mobil: skjul desktop, vis mobilversjon inne i sheetet */
+    .time-slider-mobile { display: none; }
+    @media (max-width: 768px) {
+      #time-slider-desktop { display: none !important; }
+      .time-slider-mobile {
+        display: block;
+        position: absolute;
+        bottom: 100%;  /* sitter rett over sheetets toppkant, følger sheet-transformen */
+        left: 12px; right: 12px;
+        width: auto;          /* overstyr min(540px, ...) fra .time-slider-wrap */
+        transform: none;      /* overstyr translateX(-50%) fra .time-slider-wrap */
+        margin-bottom: 8px;
+        padding: 4px 12px 4px;  /* ~25% lavere — trimmet topp/bunn */
+        background: var(--panel);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--border); border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+        transition: opacity 0.2s ease;
+        touch-action: manipulation; /* tillat tap/drag på range, ingen double-tap zoom */
+      }
+      .time-slider-mobile.full-hidden {
+        opacity: 0; pointer-events: none;
+      }
+      .time-slider-mobile.hidden { display: none; }
+      /* Mobil-trimming: tettere top-row, lavere knapper, mindre marginer */
+      .time-slider-mobile .time-slider-top { margin-bottom: 4px; gap: 10px; }
+      .time-slider-mobile .time-slider-label { font-size: 12.5px; }
+      .time-slider-mobile .time-slider-range { height: 6px; }
+      .time-slider-mobile .time-slider-range::-webkit-slider-thumb { width: 22px; height: 22px; }
+      .time-slider-mobile .time-slider-range::-moz-range-thumb { width: 22px; height: 22px; }
+      .time-slider-mobile .time-slider-btn {
+        padding: 4px 10px; font-size: 12.5px; min-height: 28px;
+      }
+      .time-slider-mobile .time-slider-ticks { margin-top: 2px; }
+      .time-slider-mobile .time-slider-collapse {
+        top: 2px; right: 4px; width: 26px; height: 26px; font-size: 17px;
+      }
+      .time-slider-mobile.collapsed {
+        left: 50%; right: auto;
+        transform: translateX(-50%);
+        min-width: 180px; width: auto;
+        padding: 2px 8px;
+      }
+      .time-slider-mobile.collapsed .time-slider-expand { padding: 6px 8px; }
+    }
+
+    /* ---------- Forklaringslag (hjelp + ordliste) --------- */
+    /* Liten "i"-knapp ved begreper i panelene */
+    .info-badge {
+      flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%;
+      border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+      font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: Georgia, "Times New Roman", serif; font-style: italic;
+      transition: color 120ms ease, border-color 120ms ease;
+      vertical-align: middle;
+    }
+    .info-badge:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Toggle-rad: checkbox-label til venstre, "i"-knapp til høyre */
+    .toggle-row { display: flex; align-items: center; gap: 4px; }
+    .toggle-row .layer-toggle { flex: 1; }
+
+    /* "Slik leser du kartet"-knapp i panelene */
+    .help-trigger {
+      display: flex; align-items: center; gap: 7px; width: 100%;
+      background: transparent; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); font-family: inherit; font-size: 12px;
+      padding: 7px 10px; cursor: pointer; text-align: left;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    .help-trigger:hover { background: rgba(255,255,255,0.05); border-color: var(--accent); }
+    .help-trigger .q {
+      flex-shrink: 0; width: 17px; height: 17px; border-radius: 50%;
+      border: 1px solid var(--accent); color: var(--accent);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+    }
+    #controls .help-trigger { margin-top: 8px; }
+
+    /* Overlay / modal */
+    #help-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(1, 4, 9, 0.66); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 24px 16px; overflow-y: auto;
+    }
+    #help-overlay.open { display: flex; }
+    .help-modal {
+      background: var(--panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      width: 100%; max-width: 520px; margin: auto;
+      padding: 0; overflow: hidden;
+    }
+    .help-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--panel); z-index: 1;
+    }
+    .help-head h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: 0.2px; }
+    .help-close {
+      flex-shrink: 0; width: 30px; height: 30px; border-radius: 6px;
+      background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+      font-size: 18px; line-height: 1; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .help-close:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+    .help-body { padding: 18px 20px 22px; }
+    .help-intro { font-size: 13px; color: var(--text-dim); margin: 0 0 18px; line-height: 1.5; }
+    .help-subhead {
+      font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase;
+      color: var(--text-dim); margin: 22px 0 12px;
+    }
+    .help-subhead:first-of-type { margin-top: 0; }
+
+    /* Del A — visuell nøkkel */
+    .key-item {
+      display: flex; gap: 12px; align-items: flex-start;
+      width: 100%; text-align: left;
+      background: transparent; border: none; border-radius: 6px;
+      color: var(--text); font-family: inherit; padding: 9px 8px;
+      cursor: pointer; transition: background 120ms ease;
+    }
+    .key-item:hover { background: rgba(255,255,255,0.05); }
+    .key-item[disabled] { cursor: default; }
+    .key-item[disabled]:hover { background: transparent; }
+    .key-swatch {
+      flex-shrink: 0; width: 30px; height: 30px; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .key-text .key-label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 2px; }
+    .key-text .key-desc { display: block; font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+    .key-dots { display: inline-flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+    .key-dots .d { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-dim); }
+    .key-dots .d i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+    /* Swatch-grafikk */
+    .sw-grad { width: 30px; height: 12px; border-radius: 2px;
+      background: linear-gradient(to right, var(--c-low), var(--c-mid) 40%, var(--c-high) 70%, var(--c-vhigh)); }
+    .sw-zones { width: 26px; height: 18px; border-radius: 3px; border: 2px solid var(--zone-no3); background: rgba(160,124,232,0.12); }
+    .sw-arrow { color: #f97316; font-size: 20px; line-height: 1; transform: translateY(-1px); }
+    .sw-battery {
+      width: 16px; height: 24px; border: 1.5px solid var(--text-dim); border-radius: 2px;
+      position: relative; display: flex; align-items: flex-end; padding: 1.5px;
+    }
+    .sw-battery::before { content: ""; position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+      width: 7px; height: 3px; background: var(--text-dim); border-radius: 1px 1px 0 0; }
+    .sw-battery span { display: block; width: 100%; height: 62%; background: #3b82f6; border-radius: 1px; }
+    .sw-flag { width: 20px; height: 14px; border-radius: 2px; overflow: hidden; display: flex; flex-direction: column; }
+    .sw-flag i { display: block; }
+    .sw-slider { width: 28px; height: 4px; background: #21262d; border-radius: 2px; position: relative; }
+    .sw-slider::after { content: ""; position: absolute; top: 50%; left: 60%; transform: translate(-50%,-50%);
+      width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+    .sw-tap {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 1.5px solid var(--text); position: relative;
+    }
+    .sw-tap::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--text); }
+    .sw-warn {
+      width: 20px; height: 18px; display: flex; align-items: center; justify-content: center;
+      color: #f59e0b; font-size: 15px;
+    }
+
+    /* Del B — ordliste */
+    .gloss {
+      border: 1px solid var(--border); border-radius: 7px;
+      margin-bottom: 8px; overflow: hidden; background: rgba(255,255,255,0.015);
+    }
+    .gloss > summary {
+      list-style: none; cursor: pointer; padding: 11px 14px;
+      font-size: 13.5px; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      transition: background 120ms ease;
+    }
+    .gloss > summary::-webkit-details-marker { display: none; }
+    .gloss > summary:hover { background: rgba(255,255,255,0.04); }
+    .gloss > summary::after {
+      content: "+"; color: var(--text-dim); font-size: 16px; font-weight: 400;
+      flex-shrink: 0; transition: transform 150ms ease;
+    }
+    .gloss[open] > summary::after { content: "−"; }
+    .gloss[open] > summary { border-bottom: 1px solid var(--border); }
+    .gloss .gloss-body {
+      padding: 12px 14px 14px; font-size: 13px; color: var(--text-dim); line-height: 1.55;
+    }
+    .gloss.flash { box-shadow: 0 0 0 1px var(--accent); border-color: var(--accent); }
+
+    @media (max-width: 768px) {
+      #help-overlay { padding: 0; }
+      .help-modal { max-width: none; min-height: 100%; border-radius: 0; margin: 0; }
+      .help-head { padding-top: max(18px, env(safe-area-inset-top)); }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <div id="info-stack">
+    <div id="info" class="panel">
+      <h1>Strømkart Norge</h1>
+      <div class="subtitle"><span class="pulse"></span>Sanntid · spotpris</div>
+      <table id="prices" class="prices-table"><tbody>
+        <tr><td colspan="2" style="color: var(--text-dim);">Laster…</td></tr>
+      </tbody></table>
+      <div id="error" class="status-err"></div>
+    </div>
+
+    <div id="desktop-balance" class="panel balance-section hidden">
+      <div class="balance-stale-banner">⚠ Bufret data</div>
+      <h1 class="balance-title">Forbruk og produksjon</h1>
+      <div class="balance-subtitle subtitle">Klikk en sone for å se</div>
+      <div class="balance-numbers"></div>
+      <div class="balance-bar"></div>
+      <div class="balance-detail"></div>
+      <div class="balance-meta"></div>
+    </div>
+
+    <div id="desktop-reservoir" class="panel reservoir-section hidden">
+      <div class="reservoir-stale-banner">⚠ Bufret data</div>
+      <button class="reservoir-back" type="button">← Se forbruk og produksjon</button>
+      <h1 class="reservoir-title">Magasinfylling</h1>
+      <div class="reservoir-subtitle subtitle">—</div>
+      <div class="reservoir-headline"></div>
+      <div class="reservoir-envelope"></div>
+      <div class="reservoir-envelope-meta"></div>
+      <div class="reservoir-top-title">Største magasin</div>
+      <div class="reservoir-top-list"></div>
+      <div class="reservoir-meta"></div>
+    </div>
+  </div>
+
+  <div id="legend" class="panel">
+    <div class="subtitle" style="margin-bottom: 8px;">Spotpris (øre/kWh) <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button></div>
+    <div class="legend-bar"></div>
+    <div class="legend-labels"><span>0</span><span>50</span><span>100</span><span>150+</span></div>
+    <div class="legend-note">Spotpris eks. mva og avgifter</div>
+  </div>
+
+  <div id="controls" class="panel">
+    <div class="subtitle">Lag</div>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris" checked> <span>Spotpris</span></label>
+      <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button>
+    </div>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-flyt" checked> <span>Kraftflyt</span></label>
+      <button class="info-badge" type="button" data-concept="kraftflyt" aria-label="Forklar kraftflyt">i</button>
+    </div>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-magasin" checked> <span>Magasinfylling</span></label>
+      <button class="info-badge" type="button" data-concept="magasinfylling" aria-label="Forklar magasinfylling">i</button>
+    </div>
+    <div class="toggle-row">
+      <label class="layer-toggle"><input type="checkbox" id="toggle-balance" checked> <span>Forbruk og produksjon</span></label>
+    </div>
+    <button class="help-trigger" type="button" data-help-open>
+      <span class="q">?</span><span>Slik leser du kartet</span>
+    </button>
+  </div>
+
+  <div id="time-slider-desktop" class="panel time-slider-wrap hidden">
+    <button class="time-slider-collapse" type="button" aria-label="Minimer tidslinje">⌄</button>
+    <div class="time-slider-top">
+      <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
+      <div class="time-slider-label">—</div>
+      <button class="time-slider-btn time-slider-now" type="button" aria-label="Hopp til nå">Nå</button>
+    </div>
+    <div class="time-slider-track-wrap">
+      <input type="range" class="time-slider-range" min="0" max="95" value="0" step="1" aria-label="Tidspunkt">
+      <div class="time-slider-now-marker" aria-hidden="true"></div>
+      <div class="time-slider-day-marker" aria-hidden="true"></div>
+    </div>
+    <div class="time-slider-ticks">
+      <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+    </div>
+    <button class="time-slider-expand" type="button" aria-label="Vis tidslinje">
+      <span class="collapsed-time-label">—</span>
+      <span class="chevron" aria-hidden="true">⌃</span>
+    </button>
+  </div>
+
+  <div id="bottom-sheet">
+    <div id="time-slider-mobile" class="time-slider-mobile time-slider-wrap hidden">
+      <button class="time-slider-collapse" type="button" aria-label="Minimer tidslinje">⌄</button>
+      <div class="time-slider-top">
+        <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
+        <div class="time-slider-label">—</div>
+        <button class="time-slider-btn time-slider-now" type="button" aria-label="Hopp til nå">Nå</button>
+      </div>
+      <div class="time-slider-track-wrap">
+        <input type="range" class="time-slider-range" min="0" max="95" value="0" step="1" aria-label="Tidspunkt">
+        <div class="time-slider-now-marker" aria-hidden="true"></div>
+        <div class="time-slider-day-marker" aria-hidden="true"></div>
+      </div>
+      <div class="time-slider-ticks">
+        <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+      </div>
+      <button class="time-slider-expand" type="button" aria-label="Vis tidslinje">
+        <span class="collapsed-time-label">—</span>
+        <span class="chevron" aria-hidden="true">⌃</span>
+      </button>
+    </div>
+
+    <div class="sheet-handle-wrap" id="sheet-drag-zone">
+      <div class="sheet-handle"></div>
+    </div>
+    <div class="sheet-content" id="sheet-scroll-zone">
+      <div id="sheet-context">
+        <h2 id="sheet-context-title">Strømkart Norge</h2>
+        <div id="sheet-context-desc">Velg et område i kartet, eller dra opp</div>
+      </div>
+
+      <div class="sheet-section">
+        <button class="help-trigger" type="button" data-help-open>
+          <span class="q">?</span><span>Slik leser du kartet</span>
+        </button>
+      </div>
+
+      <div class="sheet-section balance-section hidden" id="sheet-balance">
+        <div class="balance-stale-banner">⚠ Bufret data</div>
+        <div class="subtitle">Forbruk og produksjon</div>
+        <div class="balance-numbers"></div>
+        <div class="balance-bar"></div>
+        <div class="balance-detail"></div>
+        <div class="balance-meta"></div>
+      </div>
+
+      <div class="sheet-section reservoir-section hidden" id="sheet-reservoir">
+        <div class="reservoir-stale-banner">⚠ Bufret data</div>
+        <button class="reservoir-back" type="button">← Se forbruk og produksjon</button>
+        <div class="subtitle">Magasinfylling</div>
+        <div class="reservoir-subtitle subtitle" style="margin-top: -8px;">—</div>
+        <div class="reservoir-headline"></div>
+        <div class="reservoir-envelope"></div>
+        <div class="reservoir-envelope-meta"></div>
+        <div class="reservoir-top-title">Største magasin</div>
+        <div class="reservoir-top-list"></div>
+        <div class="reservoir-meta"></div>
+      </div>
+
+      <div class="sheet-section">
+        <div class="subtitle">Priser nå</div>
+        <table id="prices-mobile" class="prices-table"><tbody>
+          <tr><td colspan="2" style="color: var(--text-dim);">Laster…</td></tr>
+        </tbody></table>
+      </div>
+
+      <div class="sheet-section">
+        <div class="subtitle">Kartlag</div>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris-m" checked> <span>Spotpris</span></label>
+          <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button>
+        </div>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-flyt-m" checked> <span>Kraftflyt</span></label>
+          <button class="info-badge" type="button" data-concept="kraftflyt" aria-label="Forklar kraftflyt">i</button>
+        </div>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-magasin-m" checked> <span>Magasinfylling</span></label>
+          <button class="info-badge" type="button" data-concept="magasinfylling" aria-label="Forklar magasinfylling">i</button>
+        </div>
+        <div class="toggle-row">
+          <label class="layer-toggle"><input type="checkbox" id="toggle-balance-m" checked> <span>Forbruk og produksjon</span></label>
+        </div>
+      </div>
+
+      <div class="sheet-section">
+        <div class="subtitle">Fargeskala (øre/kWh)</div>
+        <div class="legend-bar"></div>
+        <div class="legend-labels"><span>0</span><span>50</span><span>100</span><span>150+</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forklaringslag: «Slik leser du kartet» + ordliste -->
+  <div id="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-hidden="true">
+    <div class="help-modal" role="document">
+      <div class="help-head">
+        <h2 id="help-title">Slik leser du kartet</h2>
+        <button class="help-close" type="button" data-help-close aria-label="Lukk">✕</button>
+      </div>
+      <div class="help-body">
+        <p class="help-intro">Kartet viser hva strøm koster i engrosmarkedet akkurat nå, hvor den flyter, og hvor mye vann vi har spart i magasinene. Trykk på et punkt under for en kort forklaring.</p>
+
+        <div class="help-subhead">Tegnforklaring</div>
+        <div id="help-key"></div>
+
+        <div class="help-subhead">Ordliste</div>
+        <div id="help-glossary"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initApp } from './js/main.js';
+    initApp();
+  </script>
+</body>
+</html>
