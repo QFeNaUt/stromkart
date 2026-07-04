@@ -1,7 +1,7 @@
 // js/main.js
 // Orkestrator: bootstrap + render-ryggrad. Toppen av lagdelingen — importerer
 // oppover fra alle featurene (config/map/state, layers, ui, interaction) og
-// binder dem sammen. index.html laster KUN denne og kaller initApp().
+// binder dem sammen. <MapCanvas/> kaller initApp(); pollingen bor i App.jsx.
 
 import { createArrowIcon, createFlagIcon, createBatteryIcon } from './icons.js';
 import { PRICE_PAINT, ZONE_LINE_PAINT, CITIES } from './config.js';
@@ -75,7 +75,7 @@ function renderPriceLayer(zones, prices) {
 }
 
 
-async function loadData() {
+export async function loadData() {
   try {
     const errorDiv = document.getElementById('error'); errorDiv.textContent = '';
 
@@ -257,6 +257,6 @@ export function initApp() {
   });
   bindToggle('kraftverk', v => { state.plantsVisible = v; if (!v) plantPopup.remove(); });
 
-  // Hent data + poll hvert 5. min
-  loadData(); setInterval(loadData, 5 * 60 * 1000);
+  // Datahenting + polling eies nå av App.jsx (useEffect med cleanup) —
+  // loadData eksporteres over. initApp gjør kun kart- og DOM-bootstrap.
 }

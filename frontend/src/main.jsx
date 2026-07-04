@@ -1,9 +1,17 @@
-// src/main.jsx — Vite-entry (steg 1: ren shim, ingen React ennå)
-// Importerer MapLibre-CSS-en (erstatter unpkg-<link>-en) og starter appen
-// nøyaktig som det gamle inline-scriptet gjorde. React-oversettelsen
-// (steg 2+) skjer her senere, panel for panel.
+// src/main.jsx — Vite-entry (steg 2: React-fundamentet)
+// Importerer MapLibre-CSS-en (erstatter unpkg-<link>-en) og monterer
+// React-treet i #root. Kart-bootstrapen (initApp) kjøres nå av
+// <MapCanvas/> bak en StrictMode-vakt — legacy-løypen er uendret,
+// bare flyttet inn bak escape-hatchen. Oversettelsen skjer herfra
+// panel for panel; UI blir en funksjon av tilstand.
 
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { initApp } from './js/main.js';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App.jsx';
 
-initApp();
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
