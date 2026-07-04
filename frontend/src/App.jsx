@@ -7,6 +7,7 @@
 import { useEffect } from 'react';
 import { AppStateProvider } from './store.jsx';
 import { MapCanvas } from './components/MapCanvas.jsx';
+import { HelpOverlay } from './components/HelpOverlay.jsx';
 import { loadData } from './js/main.js';
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
   return (
     <AppStateProvider>
       <MapCanvas />
+      <HelpOverlay />
     </AppStateProvider>
   );
 }

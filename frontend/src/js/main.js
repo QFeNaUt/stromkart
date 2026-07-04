@@ -15,7 +15,6 @@ import { renderBalanceSection } from './layers/balance.js';
 import { addPlantsLayer } from './layers/plants.js';
 import { initSheet } from './ui/sheet.js';
 import { initSlider, updateSliderUI, toggleSliderVisibility } from './ui/slider.js';
-import { initHelp } from './ui/help.js';
 import {
   handleZoneHover, handleZoneLeave, handleFlowHover, handleFlowLeave,
   handlePlantHover, handlePlantLeave,
@@ -238,9 +237,8 @@ export function initApp() {
   // Slider-modulen (js/ui/slider.js) fester sine egne event-lyttere.
   // Elementene finnes statisk i DOM, så kallet kan skje her i bootstrap.
   initSlider();
-  // Forklaringslag (js/ui/help.js): bygger tegnforklaring + ordliste,
-  // fester klikk-/Escape-lyttere, og auto-viser ved første besøk.
-  initHelp();
+  // Forklaringslaget eies nå av React (<HelpOverlay/>, steg 2.2) —
+  // tegnforklaring, ordliste, triggere og førstegangsvisning bor der.
   // Interaksjon (js/interaction.js): fester den delegerte tilbakeknapp-lytteren.
   initInteraction();
 

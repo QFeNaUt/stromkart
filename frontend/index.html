@@ -844,24 +844,7 @@
     </div>
   </div>
 
-  <!-- Forklaringslag: «Slik leser du kartet» + ordliste -->
-  <div id="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-hidden="true">
-    <div class="help-modal" role="document">
-      <div class="help-head">
-        <h2 id="help-title">Slik leser du kartet</h2>
-        <button class="help-close" type="button" data-help-close aria-label="Lukk">✕</button>
-      </div>
-      <div class="help-body">
-        <p class="help-intro">Kartet viser hva strøm koster i engrosmarkedet akkurat nå, hvor den flyter, og hvor mye vann vi har spart i magasinene. Trykk på et punkt under for en kort forklaring.</p>
-
-        <div class="help-subhead">Tegnforklaring</div>
-        <div id="help-key"></div>
-
-        <div class="help-subhead">Ordliste</div>
-        <div id="help-glossary"></div>
-      </div>
-    </div>
-  </div>
+  <!-- Forklaringslaget rendres av React: src/components/HelpOverlay.jsx -->
 
   <script type="module" src="/src/main.jsx"></script>
 </body>

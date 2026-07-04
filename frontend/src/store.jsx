@@ -18,9 +18,9 @@
 //     og feltet legges til REACT_OWNED i samme diff. Aldri to aktive
 //     kilder samtidig.
 //
-// Fundament-tilstand: REACT_OWNED er tom og reduceren kaster på alle
-// actions — røyktestens beviskrav er null dispatches og piksel-identisk
-// app. Actions defineres per komponent-commit, aldri på forskudd.
+// REACT_OWNED er fortsatt tom — ingen migrerte felt har legacy-lesere
+// (helpOpen/helpFocusKey fantes aldri i state.js). Actions defineres per
+// komponent-commit, aldri på forskudd; først ut: openHelp/closeHelp (2.2).
 // ---------------------------------------------------------
 
 import { createContext, useContext, useEffect, useReducer } from 'react';
@@ -57,7 +57,10 @@ export const initialState = {
   // Funn 2: sheet-tittel/desc var skjult tilstand i DOM-en. Nå deriveres
   // de av selection: { kind: 'zone'|'flow'|'plant'|'reservoir', props: {...} }
   selection: null,
-  // Funn 4: help må kunne åpnes fra hele treet (badges i Controls/Legend/Sheet)
+  // Funn 4: help må kunne åpnes fra hele treet (badges i Controls/Legend/Sheet).
+  // helpFocusKey: null | { key, ts } — ts settes av dispatch-stedet (Date.now()),
+  // så to klikk på samme begrep gir nytt objekt og flash/scroll-effekten
+  // re-kjører (tro mot dagens re-flash-oppførsel). Reduceren forblir ren.
   helpOpen: false,
   helpFocusKey: null,
   // Funn 3: var modul-lokale i slider.js, men delt mellom begge instanser —
@@ -68,10 +71,21 @@ export const initialState = {
 
 export function reducer(state, action) {
   switch (action.type) {
-    // Actions legges til her, én komponent-commit av gangen.
+    // --- HelpOverlay (steg 2.2) ---
+    case 'openHelp':
+      // focusKey (valgfri): begrep som skal åpnes + flashes i ordlista.
+      // ts kommer fra dispatch-stedet — se helpFocusKey-noten i initialState.
+      return {
+        ...state,
+        helpOpen: true,
+        helpFocusKey: action.focusKey ? { key: action.focusKey, ts: action.ts ?? 0 } : null,
+      };
+    case 'closeHelp':
+      return { ...state, helpOpen: false };
+
     default:
-      // Fundamentet skal ikke dispatche noe som helst. En dispatch nå er
-      // en feil i migreringsrekkefølgen — fail-fast, ikke stille ignorering.
+      // Ukjent action er en feil i migreringsrekkefølgen — fail-fast,
+      // ikke stille ignorering.
       throw new Error(`Ukjent action i AppState-reducer: ${action.type}`);
   }
 }
