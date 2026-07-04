@@ -9,6 +9,7 @@ import { AppStateProvider } from './store.jsx';
 import { MapCanvas } from './components/MapCanvas.jsx';
 import { HelpOverlay } from './components/HelpOverlay.jsx';
 import { PricesPanel } from './components/PricesPanel.jsx';
+import { Controls } from './components/Controls.jsx';
 import { loadData } from './js/main.js';
 
 export function App() {
@@ -33,6 +34,7 @@ export function App() {
       <MapCanvas />
       <HelpOverlay />
       <PricesPanel />
+      <Controls />
     </AppStateProvider>
   );
 }

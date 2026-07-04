@@ -699,31 +699,8 @@
     <div class="legend-note">Spotpris eks. mva og avgifter</div>
   </div>
 
-  <div id="controls" class="panel">
-    <div class="subtitle">Lag</div>
-    <div class="toggle-row">
-      <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris" checked> <span>Spotpris</span></label>
-      <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button>
-    </div>
-    <div class="toggle-row">
-      <label class="layer-toggle"><input type="checkbox" id="toggle-flyt" checked> <span>Kraftflyt</span></label>
-      <button class="info-badge" type="button" data-concept="kraftflyt" aria-label="Forklar kraftflyt">i</button>
-    </div>
-    <div class="toggle-row">
-      <label class="layer-toggle"><input type="checkbox" id="toggle-magasin" checked> <span>Magasinfylling</span></label>
-      <button class="info-badge" type="button" data-concept="magasinfylling" aria-label="Forklar magasinfylling">i</button>
-    </div>
-    <div class="toggle-row">
-      <label class="layer-toggle"><input type="checkbox" id="toggle-balance" checked> <span>Forbruk og produksjon</span></label>
-    </div>
-    <div class="toggle-row">
-      <label class="layer-toggle"><input type="checkbox" id="toggle-kraftverk"> <span>Kraftverk</span></label>
-      <button class="info-badge" type="button" data-concept="kraftverk" aria-label="Forklar kraftverk">i</button>
-    </div>
-    <button class="help-trigger" type="button" data-help-open>
-      <span class="q">?</span><span>Slik leser du kartet</span>
-    </button>
-  </div>
+  <!-- Kartlag-togglene rendres av React: src/components/Controls.jsx -->
+  <div id="controls" class="panel"></div>
 
   <div id="time-slider-desktop" class="panel time-slider-wrap hidden">
     <button class="time-slider-collapse" type="button" aria-label="Minimer tidslinje">⌄</button>
@@ -811,28 +788,8 @@
         <div id="prices-slot-m"></div>
       </div>
 
-      <div class="sheet-section">
-        <div class="subtitle">Kartlag</div>
-        <div class="toggle-row">
-          <label class="layer-toggle"><input type="checkbox" id="toggle-spotpris-m" checked> <span>Spotpris</span></label>
-          <button class="info-badge" type="button" data-concept="spotpris" aria-label="Forklar spotpris">i</button>
-        </div>
-        <div class="toggle-row">
-          <label class="layer-toggle"><input type="checkbox" id="toggle-flyt-m" checked> <span>Kraftflyt</span></label>
-          <button class="info-badge" type="button" data-concept="kraftflyt" aria-label="Forklar kraftflyt">i</button>
-        </div>
-        <div class="toggle-row">
-          <label class="layer-toggle"><input type="checkbox" id="toggle-magasin-m" checked> <span>Magasinfylling</span></label>
-          <button class="info-badge" type="button" data-concept="magasinfylling" aria-label="Forklar magasinfylling">i</button>
-        </div>
-        <div class="toggle-row">
-          <label class="layer-toggle"><input type="checkbox" id="toggle-balance-m" checked> <span>Forbruk og produksjon</span></label>
-        </div>
-        <div class="toggle-row">
-          <label class="layer-toggle"><input type="checkbox" id="toggle-kraftverk-m"> <span>Kraftverk</span></label>
-          <button class="info-badge" type="button" data-concept="kraftverk" aria-label="Forklar kraftverk">i</button>
-        </div>
-      </div>
+      <!-- Kartlag-togglene rendres av React (portal) -->
+      <div class="sheet-section" id="controls-slot-m"></div>
 
       <div class="sheet-section">
         <div class="subtitle">Fargeskala (øre/kWh)</div>

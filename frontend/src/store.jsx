@@ -28,9 +28,18 @@ import { state as legacyState } from './js/state.js';
 import { setAppDispatch } from './js/bridge.js';
 
 // Felt reduceren eier. Vokser med én linje per migrert komponent-commit.
-// Kun felt som OGSÅ finnes i legacy state.js trenger bro-speiling; de
+// Kun felt som OGSÅ finnes i legacy state.js trenger speiling; de
 // React-nye feltene (selection, helpOpen, ...) har ingen legacy-lesere.
-export const REACT_OWNED = [];
+export const REACT_OWNED = [
+  // Controls (steg 2.4) — synlighetsflaggene. Eneste tidligere skriver
+  // (bindToggle) er pensjonert; legacy-lesere (updateOverlayVisibility,
+  // panel-/lag-modulene) betjenes av det synkrone speilet i reduceren.
+  'spotPriceVisible',
+  'flowsVisible',
+  'reservoirsVisible',
+  'balanceVisible',
+  'plantsVisible',
+];
 
 export const initialState = {
   // --- Klasse 1: UI-tilstand (speiler js/state.js 1:1) ---
@@ -78,7 +87,30 @@ export const initialState = {
   sliderCollapsed: false,
 };
 
+// Engangs-speiling ved modul-last: legacy-defaults og initialState er
+// definert identisk, men invarianten skal ikke hvile på disiplin alene.
+for (const key of REACT_OWNED) legacyState[key] = initialState[key];
+
+// ---------------------------------------------------------
+// Reducer med synkront legacy-speil (revidert C1, låst 04.07)
+// ---------------------------------------------------------
+// Speilingen skjer HER — ikke i en effekt — fordi effekter kjører etter
+// paint: en MapLibre-hendelse i vinduet mellom commit og effekt-flush
+// ville lest utdatert speil. transition() er den rene tilstandsmaskinen;
+// reducer() er bevisst «uren» på ett kontrollert punkt: den skriver
+// REACT_OWNED-feltene til legacy-objektet før retur. Trygt fordi
+// tilordningen er idempotent (StrictModes dobbeltkjøring er ufarlig) og
+// React kjører reduceren med korrekt prev-state også ved batchede
+// dispatches — speilet konvergerer alltid til sluttilstanden.
 export function reducer(state, action) {
+  const next = transition(state, action);
+  if (next !== state) {
+    for (const key of REACT_OWNED) legacyState[key] = next[key];
+  }
+  return next;
+}
+
+function transition(state, action) {
   switch (action.type) {
     // --- HelpOverlay (steg 2.2) ---
     case 'openHelp':
@@ -91,6 +123,18 @@ export function reducer(state, action) {
       };
     case 'closeHelp':
       return { ...state, helpOpen: false };
+
+    // --- Controls (steg 2.4) ---
+    case 'setLayerVisible': {
+      // Whitelist: lag-navnene i dispatch-kallene er kompileringstids-
+      // konstanter — et ukjent navn er en programmeringsfeil og skal dø
+      // i første røyktest, ikke overleve som en stille død toggle.
+      const ALLOWED = ['spotPriceVisible', 'flowsVisible', 'reservoirsVisible', 'balanceVisible', 'plantsVisible'];
+      if (!ALLOWED.includes(action.field)) {
+        throw new Error(`setLayerVisible: ukjent lag-felt '${action.field}'`);
+      }
+      return { ...state, [action.field]: action.visible };
+    }
 
     // --- PricesPanel (steg 2.3) ---
     case 'setPriceSnapshot':

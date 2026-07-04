@@ -5,7 +5,7 @@
 
 import { createArrowIcon, createFlagIcon, createBatteryIcon } from './icons.js';
 import { PRICE_PAINT, ZONE_LINE_PAINT, CITIES } from './config.js';
-import { map, zonePopup, flowPopup, plantPopup } from './map.js';
+import { map } from './map.js';
 import { state } from './state.js';
 import { fetchCore, fetchOptional } from './api.js';
 import { buildTimeAxis, computeNowIndex, buildSnapshot } from './layers/prices.js';
@@ -175,9 +175,11 @@ function addOverlays() {
 }
 
 // ---------------------------------------------------------
-// Toggles (Synkroniserer Desktop & Mobil)
+// Lag-synlighet — kalles av addOverlays (legacy) og av MapCanvas'
+// synlighetseffekt (React, steg 2.4). Leser legacy-speilet, som holdes
+// synkront ferskt av reducerens REACT_OWNED-speiling.
 // ---------------------------------------------------------
-function updateOverlayVisibility() {
+export function updateOverlayVisibility() {
   const zV = state.spotPriceVisible ? 'visible' : 'none';
   if (map.getLayer('zones-fill')) map.setLayoutProperty('zones-fill', 'visibility', zV);
   if (map.getLayer('zones-line')) map.setLayoutProperty('zones-line', 'visibility', zV);
@@ -197,17 +199,6 @@ function updateOverlayVisibility() {
 
   const pV = state.plantsVisible ? 'visible' : 'none';
   if (map.getLayer('plants-layer')) map.setLayoutProperty('plants-layer', 'visibility', pV);
-}
-
-function syncToggle(idBase, visible) {
-  document.getElementById(`toggle-${idBase}`).checked = visible;
-  document.getElementById(`toggle-${idBase}-m`).checked = visible;
-}
-
-function bindToggle(idBase, setter) {
-  const handler = (e) => { const v = e.target.checked; setter(v); syncToggle(idBase, v); updateOverlayVisibility(); };
-  document.getElementById(`toggle-${idBase}`).addEventListener('change', handler);
-  document.getElementById(`toggle-${idBase}-m`).addEventListener('change', handler);
 }
 
 // ---------------------------------------------------------
@@ -245,18 +236,9 @@ export function initApp() {
   // Interaksjon (js/interaction.js): fester den delegerte tilbakeknapp-lytteren.
   initInteraction();
 
-  // ---------------------------------------------------------
-  // Toggles (synlighet) — wiring
-  // ---------------------------------------------------------
-  bindToggle('spotpris', v => { state.spotPriceVisible = v; if (!v) zonePopup.remove(); });
-  bindToggle('flyt', v => { state.flowsVisible = v; if (!v) flowPopup.remove(); });
-  bindToggle('magasin', v => { state.reservoirsVisible = v; });
-  bindToggle('balance', v => {
-    state.balanceVisible = v;
-    // Re-render: viser/skjuler seksjonen basert på toggle + om sone er valgt.
-    renderBalanceSection(state.selectedZone);
-  });
-  bindToggle('kraftverk', v => { state.plantsVisible = v; if (!v) plantPopup.remove(); });
+  // Toggles eies nå av React (<Controls/>, steg 2.4): kontrollerte
+  // checkboxes dispatcher setLayerVisible; kart-sideeffektene (lag-
+  // synlighet, popup-fjerning, balansepanelet) bor i MapCanvas-effektene.
 
   // Datahenting + polling eies nå av App.jsx (useEffect med cleanup) —
   // loadData eksporteres over. initApp gjør kun kart- og DOM-bootstrap.
