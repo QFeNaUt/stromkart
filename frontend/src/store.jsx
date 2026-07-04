@@ -1,8 +1,8 @@
 // src/store.jsx — AppState: useReducer + Context (arkitekturvalg B1)
 // ---------------------------------------------------------
-// Reduceren speiler klasse 1+2 fra js/state.js (15 felt) og eier i
-// tillegg de fem React-nye feltene (selection, help, slider-play/-
-// collapse) = 20 felt. Klasse 3 (zonesData, flowsData, flowsFlagsData,
+// Reduceren speiler klasse 1+2 fra js/state.js (15 felt), eier de fem
+// React-nye feltene (selection, help, slider-play/-collapse), pluss
+// snapshot-stillaset priceSnapshot (midlertidig, P1/B) = 21 felt. Klasse 3 (zonesData, flowsData, flowsFlagsData,
 // mapLoaded) blir VÆRENDE i det muterbare legacy-objektet — kun
 // imperativ kartkode konsumerer dem (reducer-opsjon C, låst 04.07).
 //
@@ -25,6 +25,7 @@
 
 import { createContext, useContext, useEffect, useReducer } from 'react';
 import { state as legacyState } from './js/state.js';
+import { setAppDispatch } from './js/bridge.js';
 
 // Felt reduceren eier. Vokser med én linje per migrert komponent-commit.
 // Kun felt som OGSÅ finnes i legacy state.js trenger bro-speiling; de
@@ -52,6 +53,14 @@ export const initialState = {
   reservoirsData: null,   // strippet til .areas (jf. datakontrakten)
   balanceData: null,      // FULL wrapper { zones, fetched_at, is_stale }
   flowsIsStale: false,
+
+  // MIDLERTIDIG STILLAS (P1/B, låst 04.07): ferdig-derivert prissnapshot
+  // { NO1..NO5: { price_ore_kwh, price_eur_mwh, timestamp } } | null.
+  // Dispatches av de to legacy-beregningsstedene (renderPriceLayer i
+  // main.js, renderAtIndex i slider.js). SLETTES når TimeSlider-migreringen
+  // gir React eierskap til todayPrices/currentIndex og PricesPanel kan
+  // derivere selv.
+  priceSnapshot: null,
 
   // --- React-nye felt (fantes ikke i state.js) ---
   // Funn 2: sheet-tittel/desc var skjult tilstand i DOM-en. Nå deriveres
@@ -83,6 +92,18 @@ export function reducer(state, action) {
     case 'closeHelp':
       return { ...state, helpOpen: false };
 
+    // --- PricesPanel (steg 2.3) ---
+    case 'setPriceSnapshot':
+      // Snapshot-stillaset — se initialState-noten. Legacy beregner,
+      // reduceren lagrer kun.
+      return { ...state, priceSnapshot: action.snapshot };
+    case 'setReservoirs':
+      // Dual-skriv-kopi fra api.js: legacy-lageret er fortsatt kilden for
+      // synkrone lesere (addOverlays-stien samme tick); denne kopien driver
+      // React-re-render (magasin-subprisen). Feltet skal IKKE i REACT_OWNED —
+      // broen må ikke speile den tilbake over legacy-skriverens verdi.
+      return { ...state, reservoirsData: action.reservoirs };
+
     default:
       // Ukjent action er en feil i migreringsrekkefølgen — fail-fast,
       // ikke stille ignorering.
@@ -91,14 +112,10 @@ export function reducer(state, action) {
 }
 
 // ---------------------------------------------------------
-// Dispatch-referanse for imperativ kode (F3, siste ledd)
+// Dispatch-broen (F3, siste ledd) bor i src/js/bridge.js (ren JS):
+// legacy-moduler importerer appDispatch derfra og rører aldri .jsx.
+// Provideren setter referansen ved mount via setAppDispatch (under).
 // ---------------------------------------------------------
-// interaction.js-handlerne lever i imperativ land i overgangsfasen, men
-// skal kunne dispatche uten React-import. Provideren setter referansen
-// ved mount. Kall før mount er en bootstrap-rekkefølgefeil → fail-fast.
-export let appDispatch = () => {
-  throw new Error('appDispatch kalt før AppStateProvider er montert');
-};
 
 // ---------------------------------------------------------
 // Provider + hooks
@@ -111,10 +128,10 @@ const DispatchContext = createContext(null);
 export function AppStateProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Eksponer dispatch for imperativ kode. Idempotent og StrictMode-trygg:
-  // dispatch-identiteten fra useReducer er stabil over hele livssyklusen.
+  // Eksponer dispatch for imperativ kode via broen. Idempotent og
+  // StrictMode-trygg: dispatch-identiteten fra useReducer er stabil.
   useEffect(() => {
-    appDispatch = dispatch;
+    setAppDispatch(dispatch);
   }, [dispatch]);
 
   // Broen (F3): énveis React → legacy for felt reduceren eier. Kjøres

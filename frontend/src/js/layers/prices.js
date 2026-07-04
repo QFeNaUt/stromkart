@@ -1,4 +1,3 @@
-import { ZONE_COLORS } from '../config.js';
 import { state } from '../state.js';
 
 /**
@@ -56,30 +55,4 @@ export function buildSnapshot(idx) {
     }
   }
   return snap;
-}
-
-/**
- * Rendrer pristabellene (desktop og mobil) basert på et snapshot.
- */
-export function renderTable(snapshot) {
-  const generateRows = () => {
-    let html = '';
-    ['NO1', 'NO2', 'NO3', 'NO4', 'NO5'].forEach(z => {
-      const p = snapshot[z], 
-            priceOre = p?.price_ore_kwh != null ? p.price_ore_kwh : null, 
-            resInfo = state.reservoirsData ? state.reservoirsData[`NO_${z.slice(2)}`] : null;
-            
-      html += `<tr>
-        <td class="zone"><span class="swatch" style="background:${ZONE_COLORS[z]||'#6b7280'}"></span>${z}</td>
-        <td class="price" style="color:${priceColor(priceOre)}">${priceOre != null ? priceOre.toFixed(1) : '—'}<span class="unit">øre/kWh</span>
-        ${resInfo?.fill_percent != null ? `<div class="subprice">Magasin: ${resInfo.fill_percent.toFixed(1)} %</div>` : ''}
-        </td>
-      </tr>`;
-    });
-    return html;
-  };
-  
-  const rows = generateRows();
-  document.querySelector('#prices tbody').innerHTML = rows;
-  document.querySelector('#prices-mobile tbody').innerHTML = rows;
 }

@@ -5,6 +5,7 @@
 
 import { API_BASE } from './config.js';
 import { state } from './state.js';
+import { appDispatch } from './bridge.js';
 
 // Robust fetch med per-request timeout (AbortController) og retry/backoff på
 // transiente gateway-/tunnel-feil (502/504/530). Et hengende kall kappes nå av
@@ -94,6 +95,11 @@ export async function fetchOptional() {
 
   const resData = await getJson(results[2]);
   state.reservoirsData = resData ? resData.areas : null;
+  // Dual-skriv i overgangen (P1, steg 2.3): legacy-skrivingen over betjener
+  // synkrone lesere (addOverlays-stien samme tick — broen er for treg for dem);
+  // kopien under driver React-re-render (PricesPanel-subprisen). Én skriver
+  // (denne), to lagre. Legacy-skrivingen fjernes når reservoir-laget migrerer.
+  appDispatch({ type: 'setReservoirs', reservoirs: state.reservoirsData });
 
   state.balanceData = await getJson(results[3]);
 

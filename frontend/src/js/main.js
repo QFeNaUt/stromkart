@@ -8,7 +8,8 @@ import { PRICE_PAINT, ZONE_LINE_PAINT, CITIES } from './config.js';
 import { map, zonePopup, flowPopup, plantPopup } from './map.js';
 import { state } from './state.js';
 import { fetchCore, fetchOptional } from './api.js';
-import { buildTimeAxis, computeNowIndex, buildSnapshot, renderTable } from './layers/prices.js';
+import { buildTimeAxis, computeNowIndex, buildSnapshot } from './layers/prices.js';
+import { appDispatch } from './bridge.js';
 import { renderFlows, addFlowLayers } from './layers/flows.js';
 import { addReservoirLayer, renderReservoirSection } from './layers/reservoirs.js';
 import { renderBalanceSection } from './layers/balance.js';
@@ -66,7 +67,9 @@ function renderPriceLayer(zones, prices) {
     }
   }
 
-  renderTable(snapshot);
+  // Pristabellen er React (<PricesPanel/>, steg 2.3): dispatch det ferdige
+  // snapshotet (snapshot-stillaset P1/B) i stedet for gamle renderTable.
+  appDispatch({ type: 'setPriceSnapshot', snapshot });
 
   // Slider-synlighet og UI-oppdatering (slideren vises først når today finnes)
   toggleSliderVisibility(state.timeAxis.length > 0);

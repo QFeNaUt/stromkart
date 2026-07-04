@@ -663,9 +663,8 @@
     <div id="info" class="panel">
       <h1>Strømkart Norge</h1>
       <div class="subtitle"><span class="pulse"></span>Sanntid · spotpris</div>
-      <table id="prices" class="prices-table"><tbody>
-        <tr><td colspan="2" style="color: var(--text-dim);">Laster…</td></tr>
-      </tbody></table>
+      <!-- Pristabellen rendres av React: src/components/PricesPanel.jsx -->
+      <div id="prices-slot"></div>
       <div id="error" class="status-err"></div>
     </div>
 
@@ -808,9 +807,8 @@
 
       <div class="sheet-section">
         <div class="subtitle">Priser nå</div>
-        <table id="prices-mobile" class="prices-table"><tbody>
-          <tr><td colspan="2" style="color: var(--text-dim);">Laster…</td></tr>
-        </tbody></table>
+        <!-- Pristabellen rendres av React (portal) -->
+        <div id="prices-slot-m"></div>
       </div>
 
       <div class="sheet-section">

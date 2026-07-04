@@ -15,7 +15,8 @@
 import { state } from '../state.js';
 import { map } from '../map.js';
 import { PLAY_SPEED_MS } from '../config.js';
-import { buildSnapshot, renderTable, computeNowIndex } from '../layers/prices.js';
+import { buildSnapshot, computeNowIndex } from '../layers/prices.js';
+import { appDispatch } from '../bridge.js';
 
 // Modul-lokal tilstand (kryssgår ikke — blir her, ikke i state.js)
 let isPlaying = false;
@@ -42,7 +43,8 @@ function renderAtIndex(idx) {
     if (src) src.setData(state.zonesData);
   }
 
-  renderTable(snapshot);
+  // Pristabellen er React (<PricesPanel/>, steg 2.3) — dispatch snapshotet.
+  appDispatch({ type: 'setPriceSnapshot', snapshot });
   updateSliderUI();
 }
 

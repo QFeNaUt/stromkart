@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { AppStateProvider } from './store.jsx';
 import { MapCanvas } from './components/MapCanvas.jsx';
 import { HelpOverlay } from './components/HelpOverlay.jsx';
+import { PricesPanel } from './components/PricesPanel.jsx';
 import { loadData } from './js/main.js';
 
 export function App() {
@@ -31,6 +32,7 @@ export function App() {
     <AppStateProvider>
       <MapCanvas />
       <HelpOverlay />
+      <PricesPanel />
     </AppStateProvider>
   );
 }
