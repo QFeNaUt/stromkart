@@ -5,7 +5,7 @@
 // hjemme her. Modul-lokal tilstand (sheet-drag, slider-avspilling,
 // init-flagg) blir værende i sin egen modul.
 //
-// Ett delt objekt med direkte mutasjon (state.selectedZone = ...).
+// Ett delt objekt med direkte mutasjon (state.todayPrices = ...).
 // Valgt framfor setter-funksjoner: minst boilerplate, nærmest dagens
 // delte scope, og objekt-egenskaper muteres fritt på tvers av moduler
 // (i motsetning til en importert `let`, som er read-only hos importøren).
@@ -23,9 +23,9 @@ export const state = {
   flowsData: null,
   flowsFlagsData: null,
   reservoirsData: null,
-  balanceData: null,
 
-  // Synlighetsflagg (toggles skriver, render/updateOverlayVisibility leser)
+  // Synlighetsflagg — REACT_OWNED-speil (reduceren skriver synkront,
+  // updateOverlayVisibility/lag-koden leser)
   spotPriceVisible: true,
   flowsVisible: true,
   flowsIsStale: false,
@@ -33,11 +33,8 @@ export const state = {
   balanceVisible: true,
   plantsVisible: false,   // Kraftverk-laget er av som standard (69 markører — opt-in)
 
-  // Valg (interaksjon skriver, panelene leser)
-  selectedZone: null,   // aktiv sone i sheet-/panel-konteksten
-  selectedView: null,   // 'balance' | 'reservoir' | null
-
-  // Time-slider-akse (slideren skriver, renderAtIndex leser)
+  // Time-slider-akse — REACT_OWNED-speil (reduceren skriver synkront,
+  // renderPriceLayer leser ved bølge 1-fyllet)
   timeAxis: [],         // Date[] — kanonisk tidsakse (lengste sone-serie)
   currentIndex: 0,      // hvilken 15-min-slot vises akkurat nå
   nowIndex: 0,          // hvor i timeAxis "nå" befinner seg

@@ -78,9 +78,10 @@ export async function fetchCore() {
 // Promise.allSettled, slik at ETT tregt/dødt endepunkt ikke blokkerer de andre.
 // Kjøres uten å blokkere kjernekartet — loadData kaller den med .then().
 //
-// Skriver de kryssgående cachene (todayPrices/reservoirsData/balanceData) direkte
-// til state — de leses senere av render-/panel-laget. Returnerer flows, som
-// loadData konsumerer lokalt via renderFlows. Hvert lag degraderer grasiøst til
+// Skriver de kryssgående cachene (todayPrices/reservoirsData) direkte til
+// state — de leses av det imperative kart-/render-laget. Balance går kun som
+// dispatch til reduceren (<BalancePanel/>). Returnerer flows, som loadData
+// konsumerer lokalt via renderFlows. Hvert lag degraderer grasiøst til
 // {} / null hvis det timer ut eller feiler.
 export async function fetchOptional() {
   const results = await Promise.allSettled([
@@ -95,18 +96,17 @@ export async function fetchOptional() {
 
   const resData = await getJson(results[2]);
   state.reservoirsData = resData ? resData.areas : null;
-  // Dual-skriv i overgangen (P1, steg 2.3): legacy-skrivingen over betjener
-  // synkrone lesere (addOverlays-stien samme tick — broen er for treg for dem);
-  // kopien under driver React-re-render (PricesPanel-subprisen). Én skriver
-  // (denne), to lagre. Legacy-skrivingen fjernes når reservoir-laget migrerer.
+  // PERMANENT dual-skriv (P1 + A2): legacy-skrivingen over betjener det
+  // imperative kartlaget (addReservoirLayer via addOverlays-stien — forblir
+  // legacy per A2, migrerer aldri); kopien under driver React-re-render
+  // (<ReservoirPanel/>). Én skriver (denne), to lagre. Skal IKKE ryddes bort.
   appDispatch({ type: 'setReservoirs', reservoirs: state.reservoirsData });
 
-  state.balanceData = await getJson(results[3]);
-  // Dual-skriv-kopi (P1, steg 2.7 — samme regel som setReservoirs over):
-  // kopien driver React-re-render (<BalancePanel/>). IKKE i REACT_OWNED.
-  // MERK: legacy-skrivingen over har ingen gjenlevende lesere etter 2.7
-  // (balance.js er pensjonert) — kan fjernes ved state.js-oppryddingen.
-  appDispatch({ type: 'balanceLoaded', balance: state.balanceData });
+  // Balance går KUN til reduceren — <BalancePanel/> er eneste leser.
+  // Legacy-skrivingen (state.balanceData) ble fjernet i state.js-oppryddingen:
+  // balance.js er pensjonert (2.7) og ingen imperativ kode leser feltet.
+  const balance = await getJson(results[3]);
+  appDispatch({ type: 'balanceLoaded', balance });
 
   return { flows };
 }
