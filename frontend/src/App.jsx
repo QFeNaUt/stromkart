@@ -11,6 +11,7 @@ import { HelpOverlay } from './components/HelpOverlay.jsx';
 import { PricesPanel } from './components/PricesPanel.jsx';
 import { Controls } from './components/Controls.jsx';
 import { loadData } from './js/main.js';
+import { TimeSlider } from './components/TimeSlider.jsx';
 
 export function App() {
   // Polling flyttet hit fra initApp. Cleanup-funksjonen rydder intervallet
@@ -35,6 +36,7 @@ export function App() {
       <HelpOverlay />
       <PricesPanel />
       <Controls />
+      <TimeSlider />
     </AppStateProvider>
   );
 }
