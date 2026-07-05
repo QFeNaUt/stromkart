@@ -1,62 +1,86 @@
 # Strømkartet
 
-Interaktiv visualisering av det norske strømnettet — priser, soner, produksjon.
+**[stromkart.no](https://stromkart.no)** — et interaktivt kart over det
+norske kraftsystemet, laget som folkeopplysning: spotpriser, kraftflyt,
+magasinfylling og produksjonsmiks vist på en måte som ikke krever
+forkunnskaper om kraftmarkedet.
 
-## Status
+Kartet viser de fem norske prissonene (NO1–NO5) med sanntids spotpris,
+fysisk kraftflyt mellom landsdeler og over utenlandsforbindelsene
+(inkludert HVDC-sjøkablene), magasinfylling per sone sammenlignet med
+historisk normalnivå, forbruk og produksjonsmiks per sone, og de største
+vann- og vindkraftverkene. En tidslinje lar deg spole gjennom døgnets
+priser i 15-minutters steg (MTU).
 
-Fase 2 under bygging: FastAPI backend + React/MapLibre frontend.
+Prisene vises i øre/kWh **eks. mva, nettleie og avgifter** — kartet
+viser markedet (råvareprisen fra kraftbørsen), ikke sluttsummen på
+strømregningen. Dette er et bevisst valg: målet er å gjøre selve
+markedsmekanikken lesbar.
 
-## Struktur
+## Datakilder og attribusjon
+
+| Kilde | Data | Lisens/vilkår |
+|---|---|---|
+| [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) | Spotpriser (Day-Ahead), kraftflyt, forbruk, produksjonsmiks | ENTSO-E-vilkår |
+| [NVE Magasinstatistikk](https://www.nve.no/energi/analyser-og-statistikk/magasinstatistikk/) | Magasinfylling per prisområde | NLOD |
+| [Norges Bank](https://www.norges-bank.no/tema/Statistikk/Valutakurser/) | Valutakurs EUR→NOK for øre/kWh-omregning | Åpne data |
+| [Electricity Maps](https://github.com/electricitymaps) | Sonegeometri (GeoJSON) | Open source |
+| [OpenStreetMap](https://www.openstreetmap.org/) | Koordinater for kraftverk og kabeltraséer | ODbL |
+| [CARTO](https://carto.com/) / OpenStreetMap | Bakgrunnskart (Dark Matter) | CARTO-vilkår / ODbL |
+
+Prisformel: `øre/kWh = EUR/MWh × dagskurs ÷ 10`.
+
+## Arkitektur (blokknivå)
 
 ```
-stromkart/
-├── backend/             # FastAPI
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── routers/     # API-endepunkter
-│   │   └── services/    # Logikk mot ENTSO-E
-│   ├── requirements.txt
-│   └── .env             # IKKE i Git! Lages fra .env.example
-├── frontend/            # React (kommer)
-├── data/
-│   └── geojson/         # Cachet sone-GeoJSON
-└── README.md
+Nettleser
+  ├── stromkart.no      → Cloudflare Pages   → frontend (React + Vite + MapLibre GL JS)
+  └── api.stromkart.no  → Cloudflare Tunnel  → backend  (FastAPI/uvicorn, hjemmeserver)
 ```
 
-## Kjør backend lokalt (Windows / PowerShell)
+- **Frontend:** React med MapLibre GL JS bak en imperativ kart-wrapper —
+  React eier paneler, kontroller og tilstand; kartlagene er håndskrevet
+  MapLibre-kode. Bygges med Vite og deployes automatisk til Cloudflare
+  Pages ved push til `main`.
+- **Backend:** FastAPI som henter, cacher og normaliserer data fra
+  kildene over, og eksponerer et lite JSON-API. Kjører på en
+  hjemmeserver (Proxmox LXC) bak Cloudflare Tunnel. API-dokumentasjon
+  genereres automatisk på `/docs` (Swagger).
 
-```powershell
-cd C:\Users\Vegard\Documents\Kodeprosjekter\stromkart\backend
+## Struktur (toppnivå)
 
-# Lag og aktiver et virtuelt miljø
-python -m venv .venv
-.venv\Scripts\activate
+```
+backend/    FastAPI-app: routers, services, modeller
+frontend/   Vite-prosjekt: index.html, src/ (React-komponenter + kartmoduler)
+verktoy/    Python-ETL for kuratering av kraftverksdata (NVE + OSM)
+data/       Statisk geodata
+```
 
-# Installer avhengigheter
+## Kjøre lokalt
+
+Backend (krever egen ENTSO-E-API-token i `.env`, se `.env.example`):
+
+```bash
+cd backend
 pip install -r requirements.txt
-
-# Lag .env og legg inn ENTSO-E-token
-copy .env.example .env
-# Åpne .env i editor og bytt ut "din_token_her"
-
-# Start serveren
 uvicorn app.main:app --reload --port 8000
 ```
 
-## Test at det funker
+Frontend (Node-versjon i `frontend/.nvmrc`):
 
-Åpne i nettleser:
+```bash
+cd frontend
+npm install
+npm run dev        # → http://localhost:5500
+```
 
-- http://localhost:8000 — helsesjekk
-- http://localhost:8000/docs — interaktiv API-dokumentasjon (Swagger UI)
-- http://localhost:8000/api/zones — GeoJSON for NO1–NO5
-- http://localhost:8000/api/prices/current — spotpriser akkurat nå
+Dev-serveren er låst til port 5500 fordi backendens CORS-whitelist
+forventer den. Pek `API_BASE` i `frontend/src/js/config.js` mot
+`http://localhost:8000` for å kjøre mot lokal backend.
 
-## API-endepunkter
+## Lisens og bruk
 
-| Metode | Path | Beskrivelse |
-|--------|------|-------------|
-| GET | `/` | Helsesjekk |
-| GET | `/api/zones` | GeoJSON for de fem prissonene |
-| POST | `/api/zones/refresh` | Tvinger ny nedlasting av GeoJSON |
-| GET | `/api/prices/current` | Siste spotpris per sone |
+Koden er et hobbyprosjekt med folkeopplysning som formål. Dataene
+tilhører sine respektive kilder (se tabellen over) og videreformidles i
+henhold til deres vilkår. Tallene på kartet er ment som opplysning, ikke
+som grunnlag for handel eller fakturakontroll.
