@@ -20,8 +20,6 @@ import { useEffect, useRef } from 'react';
 import { initApp, updateOverlayVisibility } from '../js/main.js';
 import { state as legacyState } from '../js/state.js';
 import { map, zonePopup, flowPopup, plantPopup } from '../js/map.js';
-import { renderBalanceSection } from '../js/layers/balance.js';
-import { renderReservoirSection } from '../js/layers/reservoirs.js';
 import { buildSnapshot } from '../js/layers/prices.js';
 import { setSheetState } from '../js/ui/sheet.js';
 import { useAppState } from '../store.jsx';
@@ -33,10 +31,9 @@ let legacyBooted = false;
 
 export function MapCanvas() {
   const {
-    spotPriceVisible, flowsVisible, reservoirsVisible,
-    balanceVisible, plantsVisible,
+    spotPriceVisible, flowsVisible, reservoirsVisible, plantsVisible,
     timeAxis, currentIndex, todayPrices,
-    selection, selectedZone, selectedView,
+    selection,
   } = useAppState();
 
   // Forrige selection — brukes av sheet-delen i selection-effekten for å
@@ -56,25 +53,26 @@ export function MapCanvas() {
   // reduceren — og er getLayer-vaktet, så den er trygg også før kartet
   // er ferdig lastet (no-op). Popup-fjerning når et lag skrus av er
   // idempotent (remove() på fjernet popup er ufarlig), så det er greit
-  // at effekten kjører på alle fem deps.
+  // at effekten kjører på alle fire deps. balanceVisible er ute (steg
+  // 2.7): balance har intet kartlag, og panel-synligheten eies nå av
+  // <BalancePanel/> selv.
   useEffect(() => {
     updateOverlayVisibility();
     if (!spotPriceVisible) zonePopup.remove();
     if (!flowsVisible) flowPopup.remove();
     if (!plantsVisible) plantPopup.remove();
-  }, [spotPriceVisible, flowsVisible, reservoirsVisible, balanceVisible, plantsVisible]);
+  }, [spotPriceVisible, flowsVisible, reservoirsVisible, plantsVisible]);
 
-  // --- Kart-effekt 2 (revidert steg 2.6): selection → alle bivirkninger ---
+  // --- Kart-effekt 2 (revidert steg 2.7): selection → kart-bivirkninger ---
   // Arvtakeren til bivirkningsklumpen i gamle handleMapClick/
-  // clearMobileSelection, sentralisert her (I3, låst 05.07). Absorberer
-  // også 2.4-versjonens balance-toggle-respons (balanceVisible i deps).
-  // Fire ansvar, alle idempotente:
+  // clearMobileSelection (I3, låst 05.07). Panel-renderne er pensjonert
+  // (steg 2.7): <BalancePanel/>/<ReservoirPanel/> deriverer seg selv av
+  // selectedZone/selectedView fra context — effekten eier nå kun det
+  // som faktisk rører KARTET og sheet-geometrien. To ansvar, begge
+  // idempotente:
   //   1) Highlight-filtre: derivert av selection-kind. getLayer-vaktet —
   //      selection kan uansett ikke settes før lagene finnes (krever klikk).
-  //   2) Panel-render: balance/reservoir leser selectedView fra legacy-
-  //      speilet, som reducerens synkrone speiling har gjort ferskt FØR
-  //      denne effekten kjører (hele poenget med revidert C1).
-  //   3) Sheet-state (mobil): half ved ny selection, peek ved dismiss —
+  //   2) Sheet-state (mobil): half ved ny selection, peek ved dismiss —
   //      men KUN når selection-identiteten faktisk endres (prev-ref-
   //      vakten), så backToBalance/toggles ikke rykker et manuelt dratt
   //      sheet, og initial mount (null→null) aldri rører geometrien.
@@ -90,15 +88,12 @@ export function MapCanvas() {
       map.setFilter('flows-highlight', ['==', ['get', 'id'], fid]);
     }
 
-    renderBalanceSection(selectedZone);
-    renderReservoirSection(selectedZone);
-
     if (window.innerWidth <= 768 && selection !== prevSelection.current) {
       if (selection) setSheetState('half');
       else if (prevSelection.current) setSheetState('peek');
     }
     prevSelection.current = selection;
-  }, [selection, selectedZone, selectedView, balanceVisible]);
+  }, [selection]);
 
   // --- Kart-effekt 3 (steg 2.5): sone-fyll følger tidsindeksen ---
   // Arvtakeren til kart-halvdelen av renderAtIndex (slider.js, pensjonert):

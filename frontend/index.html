@@ -668,28 +668,13 @@
       <div id="error" class="status-err"></div>
     </div>
 
-    <div id="desktop-balance" class="panel balance-section hidden">
-      <div class="balance-stale-banner">⚠ Bufret data</div>
-      <h1 class="balance-title">Forbruk og produksjon</h1>
-      <div class="balance-subtitle subtitle">Klikk en sone for å se</div>
-      <div class="balance-numbers"></div>
-      <div class="balance-bar"></div>
-      <div class="balance-detail"></div>
-      <div class="balance-meta"></div>
-    </div>
+    <!-- Balanse- og magasinpanelene rendres av React:
+         src/components/BalancePanel.jsx / ReservoirPanel.jsx (portaler).
+         Containerne beholder ID + klasser (all CSS selekterer på dem);
+         .hidden toggles av komponentenes container-klasse-effekt (P3). -->
+    <div id="desktop-balance" class="panel balance-section hidden"></div>
 
-    <div id="desktop-reservoir" class="panel reservoir-section hidden">
-      <div class="reservoir-stale-banner">⚠ Bufret data</div>
-      <button class="reservoir-back" type="button">← Se forbruk og produksjon</button>
-      <h1 class="reservoir-title">Magasinfylling</h1>
-      <div class="reservoir-subtitle subtitle">—</div>
-      <div class="reservoir-headline"></div>
-      <div class="reservoir-envelope"></div>
-      <div class="reservoir-envelope-meta"></div>
-      <div class="reservoir-top-title">Største magasin</div>
-      <div class="reservoir-top-list"></div>
-      <div class="reservoir-meta"></div>
-    </div>
+    <div id="desktop-reservoir" class="panel reservoir-section hidden"></div>
   </div>
 
   <div id="legend" class="panel">
@@ -728,27 +713,11 @@
         </button>
       </div>
 
-      <div class="sheet-section balance-section hidden" id="sheet-balance">
-        <div class="balance-stale-banner">⚠ Bufret data</div>
-        <div class="subtitle">Forbruk og produksjon</div>
-        <div class="balance-numbers"></div>
-        <div class="balance-bar"></div>
-        <div class="balance-detail"></div>
-        <div class="balance-meta"></div>
-      </div>
+      <!-- Mobil-instansene av balanse-/magasinpanelene rendres av React
+           (portal-tvillinger). ID + klasser beholdes — se desktop-noten. -->
+      <div class="sheet-section balance-section hidden" id="sheet-balance"></div>
 
-      <div class="sheet-section reservoir-section hidden" id="sheet-reservoir">
-        <div class="reservoir-stale-banner">⚠ Bufret data</div>
-        <button class="reservoir-back" type="button">← Se forbruk og produksjon</button>
-        <div class="subtitle">Magasinfylling</div>
-        <div class="reservoir-subtitle subtitle" style="margin-top: -8px;">—</div>
-        <div class="reservoir-headline"></div>
-        <div class="reservoir-envelope"></div>
-        <div class="reservoir-envelope-meta"></div>
-        <div class="reservoir-top-title">Største magasin</div>
-        <div class="reservoir-top-list"></div>
-        <div class="reservoir-meta"></div>
-      </div>
+      <div class="sheet-section reservoir-section hidden" id="sheet-reservoir"></div>
 
       <div class="sheet-section">
         <div class="subtitle">Priser nå</div>

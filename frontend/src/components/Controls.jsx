@@ -14,8 +14,9 @@
 // HelpOverlays delegeringsbro (for umigrerte triggere) dobbeltfyrt.
 // Samme grep som key-items i 2.2.
 //
-// Kart-sideeffektene (updateOverlayVisibility, popup-fjerning,
-// renderBalanceSection) bor IKKE her — de eies av MapCanvas-effektene.
+// Kart-sideeffektene (updateOverlayVisibility, popup-fjerning) bor IKKE
+// her — de eies av MapCanvas-effektene. Balansepanelet eier fra steg 2.7
+// sin egen synlighet (<BalancePanel/> leser balanceVisible fra context).
 // Controls er en ren dispatch-flate.
 // ---------------------------------------------------------
 

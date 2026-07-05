@@ -4,9 +4,11 @@
 // funksjon av (hoveredFeature, currentIndex) og re-rendres automatisk
 // under avspilling — det er dette som dreper frossen-popup-buggen.
 // Klikk-handleren under gjør kun queryRenderedFeatures → dispatch('select').
-// Alle bivirkninger som tidligere bodde her (highlight-filtre, panel-
-// render, sheet-state, DOM-skriving av sheet-tittel) er sentralisert i
-// MapCanvas' selection-effekt og <SheetHeader/>-portalen.
+// Alle bivirkninger som tidligere bodde her (highlight-filtre, sheet-
+// state, DOM-skriving av sheet-tittel) er sentralisert i MapCanvas'
+// selection-effekt og <SheetHeader/>-portalen. Tilbakeknappen bor fra
+// steg 2.7 som ren onClick i <ReservoirPanel/> — initInteraction er
+// pensjonert, og modulen eksporterer kun handleMapClick.
 // Avhengighetsregel: importerer KUN map.js + bridge.js (ren JS, aldri .jsx).
 
 import { map } from './map.js';
@@ -30,16 +32,4 @@ export function handleMapClick(e) {
   else if (f.layer.id.startsWith('flows-'))   appDispatch({ type: 'select', kind: 'flow',      props: p });
   else if (f.layer.id === 'plants-layer')     appDispatch({ type: 'select', kind: 'plant',     props: p });
   else if (f.layer.id === 'reservoirs-layer') appDispatch({ type: 'select', kind: 'reservoir', props: p });
-}
-
-// Fester den delegerte tilbakeknapp-lytteren (reservoir-panelet → balance-visning).
-// Event delegation på document beholdes (I5, låst 05.07) til panelene selv
-// migreres — men kroppen er nå en ren dispatch; panel-re-render skjer i
-// MapCanvas' selection-effekt når selectedView endres.
-export function initInteraction() {
-  document.addEventListener('click', (e) => {
-    if (e.target.classList && e.target.classList.contains('reservoir-back')) {
-      appDispatch({ type: 'backToBalance' });
-    }
-  });
 }

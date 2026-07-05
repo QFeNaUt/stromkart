@@ -102,6 +102,11 @@ export async function fetchOptional() {
   appDispatch({ type: 'setReservoirs', reservoirs: state.reservoirsData });
 
   state.balanceData = await getJson(results[3]);
+  // Dual-skriv-kopi (P1, steg 2.7 — samme regel som setReservoirs over):
+  // kopien driver React-re-render (<BalancePanel/>). IKKE i REACT_OWNED.
+  // MERK: legacy-skrivingen over har ingen gjenlevende lesere etter 2.7
+  // (balance.js er pensjonert) — kan fjernes ved state.js-oppryddingen.
+  appDispatch({ type: 'balanceLoaded', balance: state.balanceData });
 
   return { flows };
 }

@@ -2,7 +2,7 @@
 // Eier app-livssyklusen: AppState-provider + datahenting/polling
 // (mikrobeslutning A, låst 04.07). Komponent-treet vokser herfra i
 // takt med migreringsrekkefølgen: HelpOverlay → PricesPanel →
-// Controls → TimeSlider → sheet → balance/reservoir.
+// Controls → TimeSlider → interaction/sheet → balance/reservoir (2.7).
 
 import { useEffect } from 'react';
 import { AppStateProvider } from './store.jsx';
@@ -14,6 +14,8 @@ import { loadData } from './js/main.js';
 import { TimeSlider } from './components/TimeSlider.jsx';
 import { MapPopups } from './components/MapPopups.jsx';
 import { SheetHeader } from './components/SheetHeader.jsx';
+import { BalancePanel } from './components/BalancePanel.jsx';
+import { ReservoirPanel } from './components/ReservoirPanel.jsx';
 
 export function App() {
   // Polling flyttet hit fra initApp. Cleanup-funksjonen rydder intervallet
@@ -41,6 +43,8 @@ export function App() {
       <TimeSlider />
       <MapPopups />
       <SheetHeader />
+      <BalancePanel />
+      <ReservoirPanel />
     </AppStateProvider>
   );
 }

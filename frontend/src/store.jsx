@@ -45,21 +45,19 @@ export const REACT_OWNED = [
   'plantsVisible',
   // TimeSlider (steg 2.5) — tidsakse-tilstanden. Tidligere skrivere
   // (renderPriceLayer i main.js, renderAtIndex i slider.js) er hhv.
-  // omskrevet til dispatch og pensjonert. Legacy-leseren er sparkline-
-  // popupen i interaction.js — betjenes av speilet frem til
-  // interaksjonsmigreringen.
+  // omskrevet til dispatch og pensjonert. Gjenlevende legacy-leser er
+  // renderPriceLayer selv (state.userPinned/currentIndex ved bølge 1-
+  // derivasjonen) — sparklinen flyttet til <MapPopups/> i steg 2.6.
   'timeAxis',
   'currentIndex',
   'nowIndex',
   'userPinned',
-  // Interaction (steg 2.6) — selection-derivatene. Tidligere skriver
-  // (handleMapClick/clearMobileSelection i interaction.js) er omskrevet
-  // til dispatch. Legacy-lesere er balance-/reservoir-renderne
-  // (state.selectedView) og addOverlays (state.selectedZone) — betjenes
-  // av speilet frem til panelmigreringen. Kilden er selection-feltet;
-  // disse to deriveres av select-/backToBalance-actionene.
-  'selectedZone',
-  'selectedView',
+  // Interaction (steg 2.6→2.7): selectedZone/selectedView var speilet
+  // her frem til panelmigreringen. Pensjonert i steg 2.7 — de siste
+  // legacy-leserne (balance-/reservoir-renderne og panel-kallene i
+  // main.js/MapCanvas) er borte. Feltene lever videre i reduceren som
+  // rene React-felt (deriveres fortsatt av select/backToBalance) og
+  // konsumeres av <BalancePanel/>, <ReservoirPanel/> og <SheetHeader/>.
 ];
 
 export const initialState = {
@@ -84,7 +82,9 @@ export const initialState = {
   // (sparkline). IKKE i REACT_OWNED, samme regel som reservoirsData.
   todayPrices: {},
   reservoirsData: null,   // strippet til .areas (jf. datakontrakten)
-  balanceData: null,      // FULL wrapper { zones, fetched_at, is_stale }
+  balanceData: null,      // FULL wrapper { zones, fetched_at, is_stale } —
+                          // skrives av balanceLoaded (api.js, steg 2.7),
+                          // konsumeres av <BalancePanel/>.
   flowsIsStale: false,
 
   // --- React-nye felt (fantes ikke i state.js) ---
@@ -167,6 +167,14 @@ function transition(state, action) {
       // React-re-render (magasin-subprisen). Feltet skal IKKE i REACT_OWNED —
       // broen må ikke speile den tilbake over legacy-skriverens verdi.
       return { ...state, reservoirsData: action.reservoirs };
+
+    // --- BalancePanel (steg 2.7) ---
+    case 'balanceLoaded':
+      // Dual-skriv-kopi fra api.js (samme regel som setReservoirs):
+      // kopien driver React-re-render (<BalancePanel/>). Feltet skal
+      // IKKE i REACT_OWNED — broen må ikke speile det tilbake over
+      // legacy-skriverens verdi.
+      return { ...state, balanceData: action.balance };
 
     // --- TimeSlider (steg 2.5) — datainngang fra loadData ---
     case 'currentPricesLoaded':

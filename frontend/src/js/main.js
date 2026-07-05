@@ -11,11 +11,10 @@ import { fetchCore, fetchOptional } from './api.js';
 import { buildTimeAxis, computeNowIndex, buildSnapshot } from './layers/prices.js'; // rene (steg 2.5)
 import { appDispatch } from './bridge.js';
 import { renderFlows, addFlowLayers } from './layers/flows.js';
-import { addReservoirLayer, renderReservoirSection } from './layers/reservoirs.js';
-import { renderBalanceSection } from './layers/balance.js';
+import { addReservoirLayer } from './layers/reservoirs.js';
 import { addPlantsLayer } from './layers/plants.js';
 import { initSheet } from './ui/sheet.js';
-import { handleMapClick, initInteraction } from './interaction.js';
+import { handleMapClick } from './interaction.js';
 
 // Modul-lokale init-flagg (kryssgående kun innen orkestratoren).
 let overlayHandlersAttached = false;
@@ -98,11 +97,8 @@ export async function loadData() {
         renderPriceLayer(zones, prices);
         // Flyt: bygg geojson + skriv state.flowsData (addFlowLayers skjer i addOverlays).
         renderFlows(flows);
-        // Paneler re-rendres hvis en sone allerede er valgt.
-        if (state.selectedZone) {
-          renderBalanceSection(state.selectedZone);
-          renderReservoirSection(state.selectedZone);
-        }
+        // Panelene (balance/reservoir) er React-eide (steg 2.7) og
+        // re-rendres automatisk av balanceLoaded-/setReservoirs-dispatchene.
         // B1: re-kjør addOverlays slik at flow-/reservoir-lagene attaches nå som
         // state har data. Idempotent — alle addLayer-kall er getLayer-vaktet, og
         // addReservoirLayer/addFlowLayers er gated på state.reservoirsData/flowsData.
@@ -152,10 +148,6 @@ function addOverlays() {
   if (state.reservoirsData) addReservoirLayer();
   addPlantsLayer();   // statiske data → alltid; idempotent (getLayer-vaktet)
   updateOverlayVisibility();
-  if (state.selectedZone) {
-    renderBalanceSection(state.selectedZone);
-    renderReservoirSection(state.selectedZone);
-  }
 
   if (!overlayHandlersAttached) {
     // Klikk (mobil + desktop) — tynn dispatch-trigger (steg 2.6).
@@ -228,11 +220,10 @@ export function initApp() {
   // js/ui/slider.js er pensjonert.
   // Forklaringslaget eies nå av React (<HelpOverlay/>, steg 2.2) —
   // tegnforklaring, ordliste, triggere og førstegangsvisning bor der.
-  // Interaksjon (js/interaction.js, steg 2.6): kun tynne dispatch-
-  // triggere igjen — fester den delegerte tilbakeknapp-lytteren
-  // (dispatcher backToBalance). Hover-popupene eies av <MapPopups/>,
-  // sheet-tittelen av <SheetHeader/>, bivirkningene av MapCanvas.
-  initInteraction();
+  // Interaksjon (js/interaction.js): kun handleMapClick igjen — festes
+  // i addOverlays. Hover-popupene eies av <MapPopups/>, sheet-tittelen
+  // av <SheetHeader/>, kart-bivirkningene av MapCanvas. Tilbakeknappen
+  // bor nå som ren onClick i <ReservoirPanel/> (I5 fullført, steg 2.7).
 
   // Toggles eies nå av React (<Controls/>, steg 2.4): kontrollerte
   // checkboxes dispatcher setLayerVisible; kart-sideeffektene (lag-
