@@ -8,14 +8,13 @@ import { PRICE_PAINT, ZONE_LINE_PAINT, CITIES } from './config.js';
 import { map } from './map.js';
 import { state } from './state.js';
 import { fetchCore, fetchOptional } from './api.js';
-import { buildTimeAxis, computeNowIndex, buildSnapshot } from './layers/prices.js';
+import { buildTimeAxis, computeNowIndex, buildSnapshot } from './layers/prices.js'; // rene (steg 2.5)
 import { appDispatch } from './bridge.js';
 import { renderFlows, addFlowLayers } from './layers/flows.js';
 import { addReservoirLayer, renderReservoirSection } from './layers/reservoirs.js';
 import { renderBalanceSection } from './layers/balance.js';
 import { addPlantsLayer } from './layers/plants.js';
 import { initSheet } from './ui/sheet.js';
-import { initSlider, updateSliderUI, toggleSliderVisibility } from './ui/slider.js';
 import {
   handleZoneHover, handleZoneLeave, handleFlowHover, handleFlowLeave,
   handlePlantHover, handlePlantLeave,
@@ -30,28 +29,29 @@ let initialFitDone = false;
 // ---------------------------------------------------------
 // Pris-render (delt mellom bølge 1 og bølge 2)
 // ---------------------------------------------------------
-// Bygger tidsakse + snapshot, populerer sone-properties (så addOverlays får
-// riktig fyll), og oppdaterer pristabell + slider. Idempotent og kjøres to ganger
-// i den progressive lasten:
-//   - Bølge 1: state.todayPrices er tom → timeAxis tom → snapshot = prices (current).
-//   - Bølge 2: today har landet → timeAxis bygges → snapshot = buildSnapshot(index),
-//     slideren vises, og fyllet re-deriveres fra valgt indeks.
-// Sone-prop-populeringen MÅ skje før renderMap()/addOverlays() (fyllet leser
-// price_ore_kwh), derfor kalles denne alltid før renderMap i loadData.
+// Steg 2.5: funksjonen SKRIVER ikke lenger tidsakse-tilstand — den er
+// REACT_OWNED (reduceren deriverer og speiler). To ansvar gjenstår her:
+//   1) Populere sone-properties FØR renderMap()/addOverlays() (fyllet
+//      leser price_ore_kwh idet kilden opprettes). Derivasjonen gjøres
+//      lokalt med de rene prices.js-hjelperne — samme funksjoner som
+//      reducerens transition() bruker, så de to aldri kan sprike.
+//   2) Dispatche RÅDATAENE til reduceren (currentPricesLoaded +
+//      todayPricesLoaded). Alt nedstrøms (pristabell, slider-UI,
+//      kart-fyll ved indeksendring) er derivasjoner i React-verdenen.
+// Merk lese-regelen: state.userPinned/currentIndex under er REACT_OWNED-
+// speil, ferske fra forrige commit — vi leser dem i en NY hendelse
+// (poll), aldri i samme tick som en dispatch. Idempotent, kjøres to
+// ganger i den progressive lasten (bølge 1 uten today, bølge 2 med).
 function renderPriceLayer(zones, prices) {
-  // Bygg tidsakse fra dagens serie. Hvis vi har en tidsakse, dikteres
-  // sone-prisene av (state.currentIndex i) den. Hvis ikke, fall tilbake til /api/prices/current.
-  buildTimeAxis();
-  state.nowIndex = computeNowIndex();
+  const timeAxis = buildTimeAxis(state.todayPrices);
+  const nowIndex = computeNowIndex(timeAxis);
 
   let snapshot;
-  if (state.timeAxis.length > 0) {
-    if (!state.userPinned) {
-      state.currentIndex = state.nowIndex;
-    } else {
-      state.currentIndex = Math.min(state.currentIndex, state.timeAxis.length - 1);
-    }
-    snapshot = buildSnapshot(state.currentIndex);
+  if (timeAxis.length > 0) {
+    const idx = state.userPinned
+      ? Math.min(state.currentIndex, timeAxis.length - 1)
+      : nowIndex;
+    snapshot = buildSnapshot(state.todayPrices, idx);
   } else {
     // Ingen today-data — bruk /api/prices/current direkte
     snapshot = prices;
@@ -67,13 +67,16 @@ function renderPriceLayer(zones, prices) {
     }
   }
 
-  // Pristabellen er React (<PricesPanel/>, steg 2.3): dispatch det ferdige
-  // snapshotet (snapshot-stillaset P1/B) i stedet for gamle renderTable.
-  appDispatch({ type: 'setPriceSnapshot', snapshot });
-
-  // Slider-synlighet og UI-oppdatering (slideren vises først når today finnes)
-  toggleSliderVisibility(state.timeAxis.length > 0);
-  updateSliderUI();
+  // Rådata → reducer (S3, steg 2.5). Reduceren deriverer timeAxis/
+  // nowIndex/currentIndex selv og speiler dem synkront til legacy —
+  // sparkline-popupen (interaction.js) leser dermed ferske verdier.
+  // PricesPanel deriverer snapshotet sitt selv; setPriceSnapshot-
+  // stillaset er slettet. TimeSlider viser/skjuler seg selv på
+  // timeAxis.length — toggleSliderVisibility/updateSliderUI er borte.
+  appDispatch({ type: 'currentPricesLoaded', prices });
+  if (Object.keys(state.todayPrices).length > 0) {
+    appDispatch({ type: 'todayPricesLoaded', todayPrices: state.todayPrices });
+  }
 }
 
 
@@ -228,9 +231,10 @@ export function initApp() {
   // sheeten importerer interaksjonslaget. clearMobileSelection importeres
   // nå fra interaction.js (orkestratoren ligger over interaksjonslaget).
   initSheet({ onPeek: clearMobileSelection });
-  // Slider-modulen (js/ui/slider.js) fester sine egne event-lyttere.
-  // Elementene finnes statisk i DOM, så kallet kan skje her i bootstrap.
-  initSlider();
+  // Time-slideren eies nå av React (<TimeSlider/>, steg 2.5): portal-
+  // tvillinger inn i #time-slider-desktop/-mobile, avspilling som effekt,
+  // indeks-endringer som dispatch (scrubTo/playTick/snapToNow/pinUser).
+  // js/ui/slider.js er pensjonert.
   // Forklaringslaget eies nå av React (<HelpOverlay/>, steg 2.2) —
   // tegnforklaring, ordliste, triggere og førstegangsvisning bor der.
   // Interaksjon (js/interaction.js): fester den delegerte tilbakeknapp-lytteren.

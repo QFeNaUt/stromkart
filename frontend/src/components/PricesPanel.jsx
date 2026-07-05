@@ -7,10 +7,11 @@
 // Samme mønster gjelder alle panel-komponenter frem til containerne
 // selv blir React.
 //
-// Ren visning (P1/B): leser priceSnapshot (snapshot-stillaset, dispatchet
-// ferdig-beregnet fra legacy) + reservoirsData. Null derivasjon her —
-// den flytter inn når TimeSlider-migreringen gir React eierskap til
-// todayPrices/currentIndex, og stillaset slettes.
+// Derivasjon in situ (steg 2.5, S3): snapshot-stillaset er SLETTET.
+// Snapshotet er nå en ren useMemo-derivasjon av (todayPrices,
+// currentIndex) med currentPrices (bølge 1) som fallback før tidsaksen
+// finnes — samme prioritering som gamle renderPriceLayer. Tabellen
+// følger dermed slideren automatisk, uten dispatch fra render-stedene.
 //
 // Markup-troskap mot gamle renderTable (js/layers/prices.js):
 // identiske klasser (.prices-table/.zone/.swatch/.price/.unit/.subprice),
@@ -19,9 +20,10 @@
 // leser en ren legacy-helper er en lovlig nedover-kant.
 // ---------------------------------------------------------
 
+import { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ZONE_COLORS } from '../js/config.js';
-import { priceColor } from '../js/layers/prices.js';
+import { priceColor, buildSnapshot } from '../js/layers/prices.js';
 import { useAppState } from '../store.jsx';
 
 const ZONES = ['NO1', 'NO2', 'NO3', 'NO4', 'NO5'];
@@ -58,7 +60,15 @@ function PricesTable({ snapshot, reservoirs }) {
 }
 
 export function PricesPanel() {
-  const { priceSnapshot, reservoirsData } = useAppState();
+  const { todayPrices, timeAxis, currentIndex, currentPrices, reservoirsData } = useAppState();
+
+  // Snapshotet: tidsakse-styrt når today-seriene finnes, ellers bølge 1-
+  // fallbacken (/api/prices/current). null før første fetchCore →
+  // «Laster…»-raden, som før.
+  const snapshot = useMemo(() => {
+    if (timeAxis.length > 0) return buildSnapshot(todayPrices, currentIndex);
+    return currentPrices;
+  }, [todayPrices, timeAxis, currentIndex, currentPrices]);
 
   // Slot-ankrene er statiske i index.html og finnes garantert før React
   // mounter (module scripts er deferred). Guardene er defensive vakter,
@@ -69,9 +79,9 @@ export function PricesPanel() {
   return (
     <>
       {desktopSlot && createPortal(
-        <PricesTable snapshot={priceSnapshot} reservoirs={reservoirsData} />, desktopSlot)}
+        <PricesTable snapshot={snapshot} reservoirs={reservoirsData} />, desktopSlot)}
       {mobileSlot && createPortal(
-        <PricesTable snapshot={priceSnapshot} reservoirs={reservoirsData} />, mobileSlot)}
+        <PricesTable snapshot={snapshot} reservoirs={reservoirsData} />, mobileSlot)}
     </>
   );
 }

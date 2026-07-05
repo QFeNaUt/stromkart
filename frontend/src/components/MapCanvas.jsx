@@ -19,8 +19,9 @@
 import { useEffect } from 'react';
 import { initApp, updateOverlayVisibility } from '../js/main.js';
 import { state as legacyState } from '../js/state.js';
-import { zonePopup, flowPopup, plantPopup } from '../js/map.js';
+import { map, zonePopup, flowPopup, plantPopup } from '../js/map.js';
 import { renderBalanceSection } from '../js/layers/balance.js';
+import { buildSnapshot } from '../js/layers/prices.js';
 import { useAppState } from '../store.jsx';
 
 // StrictMode-vakt: beskytter KUN legacy-koden. Modul-lokal (ikke ref)
@@ -32,6 +33,7 @@ export function MapCanvas() {
   const {
     spotPriceVisible, flowsVisible, reservoirsVisible,
     balanceVisible, plantsVisible,
+    timeAxis, currentIndex, todayPrices,
   } = useAppState();
 
   useEffect(() => {
@@ -61,6 +63,31 @@ export function MapCanvas() {
   useEffect(() => {
     renderBalanceSection(legacyState.selectedZone);
   }, [balanceVisible]);
+
+  // --- Kart-effekt 3 (steg 2.5): sone-fyll følger tidsindeksen ---
+  // Arvtakeren til kart-halvdelen av renderAtIndex (slider.js, pensjonert):
+  // bygger snapshot for valgt indeks, muterer sone-properties i legacy-eid
+  // zonesData (klasse 3 — imperativ kartdata) og dytter setData. MapLibre
+  // re-tegner fyllene. Vaktet på tidsakse + at data/kilde finnes; kjører
+  // effekten før kartet er lastet er en ren no-op (getSource → undefined).
+  // Idempotent og StrictMode-trygg: dobbelt setData med samme data er
+  // ufarlig. Den INITIELLE bølge 1-populeringen skjer fortsatt i
+  // renderPriceLayer (main.js) — addOverlays leser price_ore_kwh idet
+  // kilden opprettes; denne effekten tar alle endringer etterpå (S4).
+  useEffect(() => {
+    if (!timeAxis.length || !legacyState.zonesData) return;
+    const snapshot = buildSnapshot(todayPrices, currentIndex);
+    for (const f of legacyState.zonesData.features) {
+      const p = snapshot[f.properties.zoneName];
+      if (p) {
+        f.properties.price_ore_kwh = p.price_ore_kwh;
+        f.properties.price_eur_mwh = p.price_eur_mwh;
+        f.properties.timestamp = p.timestamp;
+      }
+    }
+    const src = map.getSource('zones');
+    if (src) src.setData(legacyState.zonesData);
+  }, [timeAxis, currentIndex, todayPrices]);
 
   return null;
 }

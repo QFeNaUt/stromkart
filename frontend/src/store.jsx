@@ -1,35 +1,39 @@
 // src/store.jsx — AppState: useReducer + Context (arkitekturvalg B1)
 // ---------------------------------------------------------
-// Reduceren speiler klasse 1+2 fra js/state.js (15 felt), eier de fem
-// React-nye feltene (selection, help, slider-play/-collapse), pluss
-// snapshot-stillaset priceSnapshot (midlertidig, P1/B) = 21 felt. Klasse 3 (zonesData, flowsData, flowsFlagsData,
-// mapLoaded) blir VÆRENDE i det muterbare legacy-objektet — kun
-// imperativ kartkode konsumerer dem (reducer-opsjon C, låst 04.07).
+// Reduceren speiler klasse 1+2 fra js/state.js, eier de React-nye
+// feltene (selection, help, currentPrices), og deriverer fra og med
+// steg 2.5 tidsakse-tilstanden selv fra rådata. Klasse 3 (zonesData,
+// flowsData, flowsFlagsData, mapLoaded) blir VÆRENDE i det muterbare
+// legacy-objektet — kun imperativ kartkode konsumerer dem (reducer-
+// opsjon C, låst 04.07).
 //
 // Eierskaps-modellen (F3, låst 04.07):
 //   - Reduceren er KILDEN for feltene i REACT_OWNED. Broen speiler dem
 //     énveis React → legacy, så umigrert imperativ kode leser ferske
 //     verdier uten å vite at React finnes.
 //   - Felt UTENFOR REACT_OWNED eies fortsatt av legacy-skriverne
-//     (f.eks. slider.js → currentIndex). Broen rører dem IKKE — ellers
-//     ville en urelatert dispatch (helpOpen) overskrevet legacy-verdien
-//     med reducerens utdaterte kopi. Det er driftfellen i praksis.
+//     (f.eks. api.js → todayPrices). Broen rører dem IKKE — ellers
+//     ville en urelatert dispatch overskrevet legacy-verdien med
+//     reducerens utdaterte kopi. Det er driftfellen i praksis.
 //   - Hvert felt bytter eier i ÉN commit: skrivingen blir dispatch,
 //     og feltet legges til REACT_OWNED i samme diff. Aldri to aktive
 //     kilder samtidig.
 //
-// REACT_OWNED er fortsatt tom — ingen migrerte felt har legacy-lesere
-// (helpOpen/helpFocusKey fantes aldri i state.js). Actions defineres per
-// komponent-commit, aldri på forskudd; først ut: openHelp/closeHelp (2.2).
+// VIKTIG lese-regel for legacy: dispatch er IKKE synkron — reduceren
+// (og dermed speilingen) kjører først ved neste React-render. Legacy
+// kan derfor aldri dispatche og lese speilet i samme tick. Lesing av
+// speilet fra en SENERE hendelse (poll, mousemove, click) er trygt.
 // ---------------------------------------------------------
 
 import { createContext, useContext, useEffect, useReducer } from 'react';
 import { state as legacyState } from './js/state.js';
 import { setAppDispatch } from './js/bridge.js';
+import { buildTimeAxis, computeNowIndex } from './js/layers/prices.js';
 
 // Felt reduceren eier. Vokser med én linje per migrert komponent-commit.
 // Kun felt som OGSÅ finnes i legacy state.js trenger speiling; de
-// React-nye feltene (selection, helpOpen, ...) har ingen legacy-lesere.
+// React-nye feltene (selection, helpOpen, currentPrices, ...) har
+// ingen legacy-lesere.
 export const REACT_OWNED = [
   // Controls (steg 2.4) — synlighetsflaggene. Eneste tidligere skriver
   // (bindToggle) er pensjonert; legacy-lesere (updateOverlayVisibility,
@@ -39,6 +43,15 @@ export const REACT_OWNED = [
   'reservoirsVisible',
   'balanceVisible',
   'plantsVisible',
+  // TimeSlider (steg 2.5) — tidsakse-tilstanden. Tidligere skrivere
+  // (renderPriceLayer i main.js, renderAtIndex i slider.js) er hhv.
+  // omskrevet til dispatch og pensjonert. Legacy-leseren er sparkline-
+  // popupen i interaction.js — betjenes av speilet frem til
+  // interaksjonsmigreringen.
+  'timeAxis',
+  'currentIndex',
+  'nowIndex',
+  'userPinned',
 ];
 
 export const initialState = {
@@ -58,20 +71,21 @@ export const initialState = {
   userPinned: false,      // true når brukeren har dratt slideren bort fra "nå"
 
   // --- Klasse 2: datacacher som React-paneler leser ---
+  // todayPrices: dual-kopi fra main.js (todayPricesLoaded) — legacy-
+  // lageret (skrevet av api.js) er fortsatt kilden for synkrone lesere
+  // (sparkline). IKKE i REACT_OWNED, samme regel som reservoirsData.
   todayPrices: {},
   reservoirsData: null,   // strippet til .areas (jf. datakontrakten)
   balanceData: null,      // FULL wrapper { zones, fetched_at, is_stale }
   flowsIsStale: false,
 
-  // MIDLERTIDIG STILLAS (P1/B, låst 04.07): ferdig-derivert prissnapshot
-  // { NO1..NO5: { price_ore_kwh, price_eur_mwh, timestamp } } | null.
-  // Dispatches av de to legacy-beregningsstedene (renderPriceLayer i
-  // main.js, renderAtIndex i slider.js). SLETTES når TimeSlider-migreringen
-  // gir React eierskap til todayPrices/currentIndex og PricesPanel kan
-  // derivere selv.
-  priceSnapshot: null,
-
   // --- React-nye felt (fantes ikke i state.js) ---
+  // Bølge 1-fallback for pristabellen: /api/prices/current-objektet slik
+  // fetchCore leverte det. null → «Laster…»-raden. PricesPanel deriverer
+  // snapshot = f(todayPrices, currentIndex) og faller tilbake hit når
+  // tidsaksen ennå ikke finnes. (Erstattet snapshot-stillaset
+  // priceSnapshot, slettet i steg 2.5.)
+  currentPrices: null,
   // Funn 2: sheet-tittel/desc var skjult tilstand i DOM-en. Nå deriveres
   // de av selection: { kind: 'zone'|'flow'|'plant'|'reservoir', props: {...} }
   selection: null,
@@ -81,10 +95,9 @@ export const initialState = {
   // re-kjører (tro mot dagens re-flash-oppførsel). Reduceren forblir ren.
   helpOpen: false,
   helpFocusKey: null,
-  // Funn 3: var modul-lokale i slider.js, men delt mellom begge instanser —
-  // løftes hit for å bevare dagens synkroniserte oppførsel eksakt.
-  isPlaying: false,
-  sliderCollapsed: false,
+  // isPlaying/sliderCollapsed bor IKKE her (S2, låst 05.07): ekte lokal
+  // UI-tilstand uten legacy-lesere — useState i <TimeSlider/>, delt av
+  // begge portal-instansene via felles forelder.
 };
 
 // Engangs-speiling ved modul-last: legacy-defaults og initialState er
@@ -137,16 +150,55 @@ function transition(state, action) {
     }
 
     // --- PricesPanel (steg 2.3) ---
-    case 'setPriceSnapshot':
-      // Snapshot-stillaset — se initialState-noten. Legacy beregner,
-      // reduceren lagrer kun.
-      return { ...state, priceSnapshot: action.snapshot };
     case 'setReservoirs':
       // Dual-skriv-kopi fra api.js: legacy-lageret er fortsatt kilden for
       // synkrone lesere (addOverlays-stien samme tick); denne kopien driver
       // React-re-render (magasin-subprisen). Feltet skal IKKE i REACT_OWNED —
       // broen må ikke speile den tilbake over legacy-skriverens verdi.
       return { ...state, reservoirsData: action.reservoirs };
+
+    // --- TimeSlider (steg 2.5) — datainngang fra loadData ---
+    case 'currentPricesLoaded':
+      // Bølge 1: /api/prices/current — fallback-snapshot til tidsaksen finnes.
+      return { ...state, currentPrices: action.prices };
+    case 'todayPricesLoaded': {
+      // Bølge 2: today-seriene har landet (dual-kopi, legacy-kilde: api.js).
+      // Reduceren deriverer tidsakse-tilstanden SELV med de rene
+      // prices.js-hjelperne (S3, låst 05.07). Kjøres på nytt ved hver
+      // poll: upinnet slider følger «nå», pinnet slider beholder (klampet)
+      // posisjon — identisk med gamle renderPriceLayer-logikken.
+      const timeAxis = buildTimeAxis(action.todayPrices);
+      const nowIndex = computeNowIndex(timeAxis);
+      const currentIndex = state.userPinned
+        ? Math.min(state.currentIndex, Math.max(0, timeAxis.length - 1))
+        : nowIndex;
+      return { ...state, todayPrices: action.todayPrices, timeAxis, nowIndex, currentIndex };
+    }
+
+    // --- TimeSlider (steg 2.5) — brukerinteraksjon ---
+    case 'scrubTo': {
+      // input-hendelsen under drag. Klamping her (ikke i komponenten):
+      // reduceren er eneste sted som kjenner gyldig indeksrom.
+      if (!state.timeAxis.length) return state;
+      const idx = Math.max(0, Math.min(action.index, state.timeAxis.length - 1));
+      return { ...state, currentIndex: idx, userPinned: true };
+    }
+    case 'playTick': {
+      // Avspilling: neste slot, loop tilbake til start (legacy-troskap).
+      if (!state.timeAxis.length) return state;
+      const next = state.currentIndex + 1 >= state.timeAxis.length ? 0 : state.currentIndex + 1;
+      return { ...state, currentIndex: next, userPinned: true };
+    }
+    case 'snapToNow': {
+      // «Nå»-knappen: re-beregner nowIndex (klokka har gått siden sist).
+      if (!state.timeAxis.length) return state;
+      const nowIndex = computeNowIndex(state.timeAxis);
+      return { ...state, nowIndex, currentIndex: nowIndex, userPinned: false };
+    }
+    case 'pinUser':
+      // pointerdown på slideren: pinner FØR noen bevegelse skjer, så
+      // neste poll ikke rykker slideren tilbake til «nå» (legacy-troskap).
+      return state.userPinned ? state : { ...state, userPinned: true };
 
     default:
       // Ukjent action er en feil i migreringsrekkefølgen — fail-fast,

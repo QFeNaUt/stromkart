@@ -702,48 +702,16 @@
   <!-- Kartlag-togglene rendres av React: src/components/Controls.jsx -->
   <div id="controls" class="panel"></div>
 
-  <div id="time-slider-desktop" class="panel time-slider-wrap hidden">
-    <button class="time-slider-collapse" type="button" aria-label="Minimer tidslinje">⌄</button>
-    <div class="time-slider-top">
-      <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
-      <div class="time-slider-label">—</div>
-      <button class="time-slider-btn time-slider-now" type="button" aria-label="Hopp til nå">Nå</button>
-    </div>
-    <div class="time-slider-track-wrap">
-      <input type="range" class="time-slider-range" min="0" max="95" value="0" step="1" aria-label="Tidspunkt">
-      <div class="time-slider-now-marker" aria-hidden="true"></div>
-      <div class="time-slider-day-marker" aria-hidden="true"></div>
-    </div>
-    <div class="time-slider-ticks">
-      <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
-    </div>
-    <button class="time-slider-expand" type="button" aria-label="Vis tidslinje">
-      <span class="collapsed-time-label">—</span>
-      <span class="chevron" aria-hidden="true">⌃</span>
-    </button>
-  </div>
+  <!-- Time-slideren rendres av React: src/components/TimeSlider.jsx (portal).
+       Containeren beholder ID + klasser: all CSS selekterer på wrapperen
+       (.time-slider-wrap.hidden/.collapsed), og klassene styres av
+       TimeSlider-effekten. -->
+  <div id="time-slider-desktop" class="panel time-slider-wrap hidden"></div>
 
   <div id="bottom-sheet">
-    <div id="time-slider-mobile" class="time-slider-mobile time-slider-wrap hidden">
-      <button class="time-slider-collapse" type="button" aria-label="Minimer tidslinje">⌄</button>
-      <div class="time-slider-top">
-        <button class="time-slider-btn time-slider-play" type="button" aria-label="Spill av/pause">▶</button>
-        <div class="time-slider-label">—</div>
-        <button class="time-slider-btn time-slider-now" type="button" aria-label="Hopp til nå">Nå</button>
-      </div>
-      <div class="time-slider-track-wrap">
-        <input type="range" class="time-slider-range" min="0" max="95" value="0" step="1" aria-label="Tidspunkt">
-        <div class="time-slider-now-marker" aria-hidden="true"></div>
-        <div class="time-slider-day-marker" aria-hidden="true"></div>
-      </div>
-      <div class="time-slider-ticks">
-        <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
-      </div>
-      <button class="time-slider-expand" type="button" aria-label="Vis tidslinje">
-        <span class="collapsed-time-label">—</span>
-        <span class="chevron" aria-hidden="true">⌃</span>
-      </button>
-    </div>
+    <!-- Mobil-instansen av time-slideren rendres av React (portal).
+         ID + klasser beholdes: sheet.js toggler .full-hidden på denne. -->
+    <div id="time-slider-mobile" class="time-slider-mobile time-slider-wrap hidden"></div>
 
     <div class="sheet-handle-wrap" id="sheet-drag-zone">
       <div class="sheet-handle"></div>
