@@ -16,12 +16,14 @@
 // modul-lokal vakt. Vakten fjernes når initApp er ferdig demontert.
 // ---------------------------------------------------------
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { initApp, updateOverlayVisibility } from '../js/main.js';
 import { state as legacyState } from '../js/state.js';
 import { map, zonePopup, flowPopup, plantPopup } from '../js/map.js';
 import { renderBalanceSection } from '../js/layers/balance.js';
+import { renderReservoirSection } from '../js/layers/reservoirs.js';
 import { buildSnapshot } from '../js/layers/prices.js';
+import { setSheetState } from '../js/ui/sheet.js';
 import { useAppState } from '../store.jsx';
 
 // StrictMode-vakt: beskytter KUN legacy-koden. Modul-lokal (ikke ref)
@@ -34,7 +36,13 @@ export function MapCanvas() {
     spotPriceVisible, flowsVisible, reservoirsVisible,
     balanceVisible, plantsVisible,
     timeAxis, currentIndex, todayPrices,
+    selection, selectedZone, selectedView,
   } = useAppState();
+
+  // Forrige selection — brukes av sheet-delen i selection-effekten for å
+  // skille identitetsendring (snap half/peek) fra rene re-derivasjoner
+  // (backToBalance, balance-toggle) der sheetet skal stå urørt.
+  const prevSelection = useRef(null);
 
   useEffect(() => {
     if (legacyBooted) return;
@@ -56,13 +64,41 @@ export function MapCanvas() {
     if (!plantsVisible) plantPopup.remove();
   }, [spotPriceVisible, flowsVisible, reservoirsVisible, balanceVisible, plantsVisible]);
 
-  // --- Kart-effekt 2 (steg 2.4): balansepanelets toggle-respons ---
-  // Gamle bindToggle('balance')-sideeffekten: viser/skjuler seksjonen
-  // basert på toggle + valgt sone. selectedZone er fortsatt legacy-eid
-  // (interaction.js skriver den) — leses derfra til den migreres.
+  // --- Kart-effekt 2 (revidert steg 2.6): selection → alle bivirkninger ---
+  // Arvtakeren til bivirkningsklumpen i gamle handleMapClick/
+  // clearMobileSelection, sentralisert her (I3, låst 05.07). Absorberer
+  // også 2.4-versjonens balance-toggle-respons (balanceVisible i deps).
+  // Fire ansvar, alle idempotente:
+  //   1) Highlight-filtre: derivert av selection-kind. getLayer-vaktet —
+  //      selection kan uansett ikke settes før lagene finnes (krever klikk).
+  //   2) Panel-render: balance/reservoir leser selectedView fra legacy-
+  //      speilet, som reducerens synkrone speiling har gjort ferskt FØR
+  //      denne effekten kjører (hele poenget med revidert C1).
+  //   3) Sheet-state (mobil): half ved ny selection, peek ved dismiss —
+  //      men KUN når selection-identiteten faktisk endres (prev-ref-
+  //      vakten), så backToBalance/toggles ikke rykker et manuelt dratt
+  //      sheet, og initial mount (null→null) aldri rører geometrien.
   useEffect(() => {
-    renderBalanceSection(legacyState.selectedZone);
-  }, [balanceVisible]);
+    if (map.getLayer('zones-highlight')) {
+      const z = selection?.kind === 'zone' ? selection.props.zoneName
+        : selection?.kind === 'reservoir' ? selection.props.zone.replace('_', '')
+        : '';
+      map.setFilter('zones-highlight', ['==', ['get', 'zoneName'], z]);
+    }
+    if (map.getLayer('flows-highlight')) {
+      const fid = selection?.kind === 'flow' ? selection.props.id : '';
+      map.setFilter('flows-highlight', ['==', ['get', 'id'], fid]);
+    }
+
+    renderBalanceSection(selectedZone);
+    renderReservoirSection(selectedZone);
+
+    if (window.innerWidth <= 768 && selection !== prevSelection.current) {
+      if (selection) setSheetState('half');
+      else if (prevSelection.current) setSheetState('peek');
+    }
+    prevSelection.current = selection;
+  }, [selection, selectedZone, selectedView, balanceVisible]);
 
   // --- Kart-effekt 3 (steg 2.5): sone-fyll følger tidsindeksen ---
   // Arvtakeren til kart-halvdelen av renderAtIndex (slider.js, pensjonert):

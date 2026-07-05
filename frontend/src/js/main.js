@@ -15,11 +15,7 @@ import { addReservoirLayer, renderReservoirSection } from './layers/reservoirs.j
 import { renderBalanceSection } from './layers/balance.js';
 import { addPlantsLayer } from './layers/plants.js';
 import { initSheet } from './ui/sheet.js';
-import {
-  handleZoneHover, handleZoneLeave, handleFlowHover, handleFlowLeave,
-  handlePlantHover, handlePlantLeave,
-  handleMapClick, clearMobileSelection, initInteraction,
-} from './interaction.js';
+import { handleMapClick, initInteraction } from './interaction.js';
 
 // Modul-lokale init-flagg (kryssgående kun innen orkestratoren).
 let overlayHandlersAttached = false;
@@ -162,16 +158,10 @@ function addOverlays() {
   }
 
   if (!overlayHandlersAttached) {
-    // Desktop Hover — bindes mot det usynlige flows-hit-laget (konstant bredde)
-    // så også tynne, lavt lastede kabler er lette å treffe.
-    map.on('mousemove', 'zones-fill', handleZoneHover);
-    map.on('mouseleave', 'zones-fill', handleZoneLeave);
-    map.on('mousemove', 'flows-hit', handleFlowHover);
-    map.on('mouseleave', 'flows-hit', handleFlowLeave);
-    map.on('mousemove', 'plants-layer', handlePlantHover);
-    map.on('mouseleave', 'plants-layer', handlePlantLeave);
-
-    // Mobile Click
+    // Klikk (mobil + desktop) — tynn dispatch-trigger (steg 2.6).
+    // Desktop-hover eies nå av React (<MapPopups/>): én map-nivå
+    // mousemove-lytter bindes der ved mount; flows-hit-laget (konstant
+    // bredde) er fortsatt treffgrunnlaget via queryRenderedFeatures.
     map.on('click', handleMapClick);
     overlayHandlersAttached = true;
   }
@@ -226,18 +216,22 @@ export function initApp() {
   // 2) Mobile Bottom Sheet & Slider + forklaringslag — bootstrap
   // ---------------------------------------------------------
   // Sheet-modulen (js/ui/sheet.js) eier all drag-/snap-mekanikk og sin
-  // egen tilstand. onPeek kobler dismiss-gesten (dra helt ned) til
-  // clearMobileSelection — det bryter sheet↔interaksjon-sykelen uten at
-  // sheeten importerer interaksjonslaget. clearMobileSelection importeres
-  // nå fra interaction.js (orkestratoren ligger over interaksjonslaget).
-  initSheet({ onPeek: clearMobileSelection });
+  // egen tilstand (I4, låst 05.07 — forblir imperativ «dum» DOM).
+  // onPeek kobler dismiss-gesten (dra helt ned) til clearSelection-
+  // dispatchen; MapCanvas' selection-effekt tar opprydningen (filtre,
+  // paneler), og <SheetHeader/> nullstiller tittelen. Gamle
+  // clearMobileSelection er pensjonert.
+  initSheet({ onPeek: () => appDispatch({ type: 'clearSelection' }) });
   // Time-slideren eies nå av React (<TimeSlider/>, steg 2.5): portal-
   // tvillinger inn i #time-slider-desktop/-mobile, avspilling som effekt,
   // indeks-endringer som dispatch (scrubTo/playTick/snapToNow/pinUser).
   // js/ui/slider.js er pensjonert.
   // Forklaringslaget eies nå av React (<HelpOverlay/>, steg 2.2) —
   // tegnforklaring, ordliste, triggere og førstegangsvisning bor der.
-  // Interaksjon (js/interaction.js): fester den delegerte tilbakeknapp-lytteren.
+  // Interaksjon (js/interaction.js, steg 2.6): kun tynne dispatch-
+  // triggere igjen — fester den delegerte tilbakeknapp-lytteren
+  // (dispatcher backToBalance). Hover-popupene eies av <MapPopups/>,
+  // sheet-tittelen av <SheetHeader/>, bivirkningene av MapCanvas.
   initInteraction();
 
   // Toggles eies nå av React (<Controls/>, steg 2.4): kontrollerte

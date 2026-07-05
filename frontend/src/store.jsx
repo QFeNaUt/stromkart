@@ -52,6 +52,14 @@ export const REACT_OWNED = [
   'currentIndex',
   'nowIndex',
   'userPinned',
+  // Interaction (steg 2.6) — selection-derivatene. Tidligere skriver
+  // (handleMapClick/clearMobileSelection i interaction.js) er omskrevet
+  // til dispatch. Legacy-lesere er balance-/reservoir-renderne
+  // (state.selectedView) og addOverlays (state.selectedZone) — betjenes
+  // av speilet frem til panelmigreringen. Kilden er selection-feltet;
+  // disse to deriveres av select-/backToBalance-actionene.
+  'selectedZone',
+  'selectedView',
 ];
 
 export const initialState = {
@@ -88,6 +96,9 @@ export const initialState = {
   currentPrices: null,
   // Funn 2: sheet-tittel/desc var skjult tilstand i DOM-en. Nå deriveres
   // de av selection: { kind: 'zone'|'flow'|'plant'|'reservoir', props: {...} }
+  // AKTIVT fra steg 2.6: skrives av select/clearSelection, konsumeres av
+  // <SheetHeader/> og MapCanvas' selection-effekt. selectedZone/selectedView
+  // (over) deriveres av dette feltet i select-actionen.
   selection: null,
   // Funn 4: help må kunne åpnes fra hele treet (badges i Controls/Legend/Sheet).
   // helpFocusKey: null | { key, ts } — ts settes av dispatch-stedet (Date.now()),
@@ -199,6 +210,35 @@ function transition(state, action) {
       // pointerdown på slideren: pinner FØR noen bevegelse skjer, så
       // neste poll ikke rykker slideren tilbake til «nå» (legacy-troskap).
       return state.userPinned ? state : { ...state, userPinned: true };
+
+    // --- Interaction (steg 2.6) ---
+    case 'select': {
+      // Klikk/tap på et kart-objekt. selectedZone/selectedView DERIVERES
+      // her (samme mønster som tidsakse-derivasjonen i S3): sone-tap gir
+      // balance-visning, batteri-tap gir reservoir-visning (sone og
+      // batteri deler NO_x-nøkkelen), flyt/kraftverk gir ingen panel.
+      const { kind, props } = action;
+      let selectedZone = null, selectedView = null;
+      if (kind === 'zone') {
+        selectedZone = `NO_${props.zoneName.slice(2)}`; // "NO2" -> "NO_2"
+        selectedView = 'balance';
+      } else if (kind === 'reservoir') {
+        selectedZone = props.zone; // allerede "NO_x"-format
+        selectedView = 'reservoir';
+      }
+      return { ...state, selection: { kind, props }, selectedZone, selectedView };
+    }
+    case 'clearSelection':
+      // Tomt kart-tap eller sheet-dismiss (onPeek). No-op når ingenting
+      // er valgt — da skal heller ikke selection-effekten re-kjøre.
+      if (!state.selection && !state.selectedZone) return state;
+      return { ...state, selection: null, selectedZone: null, selectedView: null };
+    case 'backToBalance':
+      // Tilbakeknappen i reservoir-panelet. selection beholdes (sheet-
+      // tittelen skal fortsatt vise magasinet — legacy-troskap: gamle
+      // koden rørte heller ikke tittelen her), kun visningen byttes.
+      if (!state.selectedZone) return state;
+      return { ...state, selectedView: 'balance' };
 
     default:
       // Ukjent action er en feil i migreringsrekkefølgen — fail-fast,

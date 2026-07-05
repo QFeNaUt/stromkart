@@ -5,8 +5,8 @@
 // Vet ingenting om kartlogikk. Varsler oppover via injisert onPeek-
 // callback når brukeren drar sheetet helt ned (dismiss). Det bryter
 // sheet↔interaksjon-sykelen (jf. arkitekturbeslutning 24.06):
-// orkestratoren injiserer clearMobileSelection som onPeek, og sheeten
-// importerer den aldri selv.
+// orkestratoren injiserer en clearSelection-dispatch som onPeek, og
+// sheeten importerer aldri interaksjons-/React-laget selv.
 //
 // Null import fra config/map/state — ren DOM + modul-lokal tilstand.
 // ---------------------------------------------------------
@@ -95,7 +95,7 @@ export function initSheet({ onPeek } = {}) {
     }
 
     // Hvis vi smeller sheetet helt ned, fjern eventuell aktiv map-markering.
-    // onPeek injiseres av orkestratoren (= clearMobileSelection). Guard mot
+    // onPeek injiseres av orkestratoren (= clearSelection-dispatch). Guard mot
     // manglende wiring, så en "dum" komponent aldri kaster ReferenceError.
     if (closest === 'peek' && onPeek) onPeek();
     setSheetState(closest);

@@ -12,6 +12,8 @@ import { PricesPanel } from './components/PricesPanel.jsx';
 import { Controls } from './components/Controls.jsx';
 import { loadData } from './js/main.js';
 import { TimeSlider } from './components/TimeSlider.jsx';
+import { MapPopups } from './components/MapPopups.jsx';
+import { SheetHeader } from './components/SheetHeader.jsx';
 
 export function App() {
   // Polling flyttet hit fra initApp. Cleanup-funksjonen rydder intervallet
@@ -37,6 +39,8 @@ export function App() {
       <PricesPanel />
       <Controls />
       <TimeSlider />
+      <MapPopups />
+      <SheetHeader />
     </AppStateProvider>
   );
 }
