@@ -2,170 +2,146 @@
 """
 Strømkartet — kuratering av kraftverk, steg 1: HENT KANDIDATER (attributter)
 
-Henter de største vann- og vindkraftverkene fra NVEs åpne attributt-API og
-skriver to CSV-filer for manuell gjennomgang:
-
-    kandidater_vannkraft.csv   (topp N etter MaksYtelse)
-    kandidater_vindkraft.csv   (topp N etter InstallertEffekt_MW)
-
-MERK — koordinater hentes IKKE her.
-  NVEs geometri-tjeneste (nve.geodataonline.no) svarte NXDOMAIN og er under
-  omlegging (ny tjeneste ventet våren 2026). Vi henter derfor kun attributtene
-  som virker (api.nve.no), og lar lon/lat stå tomme. Koordinatene fylles i
-  neste steg med hent_koordinater.py (slår opp presis posisjon via OpenStreetMap).
-
-  Dette er samme prinsipp som Promise.allSettled-fiksen i api.js: kjernedataene
-  (navn/MW/GWh/sone) skal komme trygt gjennom selv om den skjøre kilden
-  (geometri) svikter.
+Henter vann- og vindkraftverk over angitt MW-terskel fra NVEs åpne attributt-API.
+Skriptet er "merge-bevisst": det leser eksisterende CSV-filer for å bevare manuelt
+arbeid (koordinater, klassifisering) og legger kun til NYE kraftverk som mangler.
 
 Arbeidsflyt:
-  1. python hent_kraftverk_kandidater.py   (denne — skriver CSV-ene)
-  2. python hent_koordinater.py            (fyller lon/lat interaktivt via OSM)
+  1. python hent_kraftverk_kandidater.py   (denne — oppdaterer CSV-ene sikkert)
+  2. python hent_koordinater.py            (fyller lon/lat for de nye radene)
   3. I CSV-ene: sett behold=JA og (vannkraft) kategori=magasin/elv
   4. python generer_plants_data.py         (skriver frontend-modulen)
-
-Kjøres lokalt på PC (krever kun `requests`):
-    python hent_kraftverk_kandidater.py
-
-Data: NVE, Norsk lisens for offentlige data (NLOD).
 """
 
 import csv
 import sys
-
+import os
 import requests
 
-# ---------------------------------------------------------------------------
-# Konfigurasjon
-# ---------------------------------------------------------------------------
+# --- Konfigurasjon ---
+MW_TERSKEL = 50  # Henter alle anlegg med installert effekt >= 50 MW
 
-# Romsligere enn de endelige listene (20+10 vann, 10 vind) så du har
-# slingringsmonn under kurateringen — f.eks. hvis et anlegg viser seg å være
-# pumpekraft du ikke vil ha, eller magasin/elv-klassifiseringen tvinger deg
-# lenger ned på lista for å fylle elvekraft-kvoten.
-ANTALL_VANN_KANDIDATER = 60
-ANTALL_VIND_KANDIDATER = 18
-
-# Verifiserte endepunkter (api.nve.no/doc, juli 2026) — disse svarer.
 URL_VANN_ATTR = "https://api.nve.no/web/Powerplant/GetHydroPowerPlantsInOperation"
 URL_VIND_ATTR = "https://api.nve.no/web/WindPowerplant/GetWindPowerPlantsInOperation"
+TIMEOUT = 30
 
-TIMEOUT = 30  # sekunder — alle HTTP-kall skal ha timeout (lærdom fra backend-fiks #2)
 
-
-# ---------------------------------------------------------------------------
-# Hjelpefunksjon
-# ---------------------------------------------------------------------------
+def les_eksisterende_csv(sti):
+    """Leser eksisterende CSV for å bevare manuelt arbeid. Encoding-fallback
+    som i generer_plants_data.py: Excel lagrer ofte tilbake som cp1252."""
+    if not os.path.exists(sti):
+        return []
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            with open(sti, "r", encoding=enc, newline="") as f:
+                return list(csv.DictReader(f, delimiter=";"))
+        except UnicodeDecodeError:
+            continue
+    raise SystemExit(f"Klarte ikke dekode {sti} (verken utf-8 eller cp1252).")
 
 def skriv_csv(sti, kolonner, rader):
-    """Skriver CSV tilpasset norsk Excel: semikolon + UTF-8 med BOM.
-
-    utf-8-sig gjør at Excel på Windows viser æøå riktig ved dobbeltklikk
-    (samme encoding-hensyn som -F melding.txt-mønsteret i git).
-    """
+    """Skriver CSV (med BOM for Excel-kompatibilitet)."""
     with open(sti, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=kolonner, delimiter=";")
         w.writeheader()
         w.writerows(rader)
-    print(f"  Skrev {len(rader)} rader -> {sti}")
 
+def flett_og_lagre(sti, api_kandidater, kolonner):
+    """Fletter nye API-treff med eksisterende rader uten å overskrive data."""
+    eksisterende_rader = les_eksisterende_csv(sti)
+    
+    # Lag et normalisert oppslag for rask duplikatsjekk
+    eksisterende_navn = {rad["navn"].strip().lower() for rad in eksisterende_rader}
 
-# ---------------------------------------------------------------------------
-# Vannkraft
-# ---------------------------------------------------------------------------
+    nye_rader = []
+    for kand in api_kandidater:
+        navn_lower = kand["navn"].strip().lower()
+        if navn_lower not in eksisterende_navn:
+            nye_rader.append(kand)
+
+    alle_rader = eksisterende_rader + nye_rader
+
+    # Sorterer alt synkende på MW for ryddighetens skyld.
+    def hent_mw(rad):
+        try:
+            return float(str(rad["mw"]).replace(",", "."))
+        except ValueError:
+            return 0.0
+
+    alle_rader.sort(key=hent_mw, reverse=True)
+
+    skriv_csv(sti, kolonner, alle_rader)
+    print(f"  Resultat i {sti}:")
+    print(f"    - Beholdt {len(eksisterende_rader)} eksisterende rader.")
+    print(f"    - La til {len(nye_rader)} nye rader (>= {MW_TERSKEL} MW).")
+
 
 def hent_vannkraft():
     print("\n=== VANNKRAFT ===")
-    print("Henter attributter fra api.nve.no ...")
+    print(f"Henter attributter fra api.nve.no (Grense: {MW_TERSKEL} MW)...")
     resp = requests.get(URL_VANN_ATTR, timeout=TIMEOUT)
     resp.raise_for_status()
     verk = resp.json()
-    print(f"  {len(verk)} vannkraftverk i drift totalt.")
 
-    # Rene pumper produserer ikke kraft og filtreres bort. Pumpekraftverk
-    # (f.eks. Saurdal) BEHOLDES — de er reelle produsenter og hører hjemme
-    # i magasin-kategorien. Kolonnen 'vannkvtype' viser hvilke det gjelder,
-    # så du ser dem når du klassifiserer.
-    kandidater = [
-        v for v in verk
-        if v.get("VannKVType") in ("Kraftverk", "Pumpekraftverk")
-        and v.get("MaksYtelse")
-    ]
-    kandidater.sort(key=lambda v: v["MaksYtelse"], reverse=True)
-    kandidater = kandidater[:ANTALL_VANN_KANDIDATER]
-    print(f"  Topp {len(kandidater)} etter MaksYtelse valgt som kandidater.")
+    api_kandidater = []
+    for v in verk:
+        # Pumper (som ikke produserer selv) filtreres vekk, men pumpekraftverk beholdes
+        if v.get("VannKVType") in ("Kraftverk", "Pumpekraftverk"):
+            mw = v.get("MaksYtelse")
+            if mw and mw >= MW_TERSKEL:
+                api_kandidater.append({
+                    "behold": "",
+                    "kategori": "",
+                    "navn": v["Navn"],
+                    "mw": mw,
+                    "gwh": v.get("MidProd_91_20"),
+                    "sone": f"NO{v.get('ElspotomraadeNummer')}",
+                    "eier": v.get("HovedEier"),
+                    "kommune": v.get("Kommune"),
+                    "lon": "",
+                    "lat": "",
+                    "vannkvtype": v.get("VannKVType"),
+                })
 
-    rader = [{
-        "behold": "",            # <- fylles inn manuelt: JA
-        "kategori": "",          # <- fylles inn manuelt: magasin / elv
-        "navn": v["Navn"],
-        "mw": v["MaksYtelse"],
-        "gwh": v.get("MidProd_91_20"),
-        "sone": f"NO{v.get('ElspotomraadeNummer')}",
-        "eier": v.get("HovedEier"),
-        "kommune": v.get("Kommune"),
-        "lon": "",               # <- fylles av hent_koordinater.py
-        "lat": "",               # <- fylles av hent_koordinater.py
-        "vannkvtype": v.get("VannKVType"),
-    } for v in kandidater]
+    kolonner = ["behold", "kategori", "navn", "mw", "gwh", "sone", "eier", "kommune", "lon", "lat", "vannkvtype"]
+    flett_og_lagre("kandidater_vannkraft.csv", api_kandidater, kolonner)
 
-    skriv_csv(
-        "kandidater_vannkraft.csv",
-        ["behold", "kategori", "navn", "mw", "gwh", "sone", "eier",
-         "kommune", "lon", "lat", "vannkvtype"],
-        rader,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Vindkraft
-# ---------------------------------------------------------------------------
 
 def hent_vindkraft():
     print("\n=== VINDKRAFT ===")
-    print("Henter attributter fra api.nve.no ...")
+    print(f"Henter attributter fra api.nve.no (Grense: {MW_TERSKEL} MW)...")
     resp = requests.get(URL_VIND_ATTR, timeout=TIMEOUT)
     resp.raise_for_status()
     verk = resp.json()
-    print(f"  {len(verk)} vindkraftverk i drift totalt.")
 
-    kandidater = [v for v in verk if v.get("InstallertEffekt_MW")]
-    kandidater.sort(key=lambda v: v["InstallertEffekt_MW"], reverse=True)
-    kandidater = kandidater[:ANTALL_VIND_KANDIDATER]
-    print(f"  Topp {len(kandidater)} etter InstallertEffekt_MW valgt som kandidater.")
+    api_kandidater = []
+    for v in verk:
+        mw = v.get("InstallertEffekt_MW")
+        if mw and mw >= MW_TERSKEL:
+            api_kandidater.append({
+                "behold": "",
+                "kategori": "vind",
+                "navn": v["Navn"],
+                "mw": mw,
+                "gwh": v.get("NormalAArsproduksjon_GWh"),
+                "sone": f"NO{v.get('ElspotomraadeNummer')}",
+                "eier": v.get("HovedEierNavn"),
+                "kommune": v.get("Kommune"),
+                "lon": "",
+                "lat": "",
+            })
 
-    rader = [{
-        "behold": "",
-        "kategori": "vind",
-        "navn": v["Navn"],
-        "mw": v["InstallertEffekt_MW"],
-        "gwh": v.get("NormalAArsproduksjon_GWh"),
-        "sone": f"NO{v.get('ElspotomraadeNummer')}",
-        "eier": v.get("HovedEierNavn"),
-        "kommune": v.get("Kommune"),
-        "lon": "",
-        "lat": "",
-    } for v in kandidater]
+    kolonner = ["behold", "kategori", "navn", "mw", "gwh", "sone", "eier", "kommune", "lon", "lat"]
+    flett_og_lagre("kandidater_vindkraft.csv", api_kandidater, kolonner)
 
-    skriv_csv(
-        "kandidater_vindkraft.csv",
-        ["behold", "kategori", "navn", "mw", "gwh", "sone", "eier",
-         "kommune", "lon", "lat"],
-        rader,
-    )
-
-
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     try:
         hent_vannkraft()
         hent_vindkraft()
     except requests.RequestException as e:
-        # NVE-attributt-API-ene er åpne og token-frie, så feilmeldingen kan
-        # skrives rått (ingen hemmeligheter å skrubbe).
         print(f"\nHTTP-feil: {e}", file=sys.stderr)
         sys.exit(1)
 
     print("\nFerdig. Neste steg:")
-    print("  python hent_koordinater.py   (fyller lon/lat via OpenStreetMap)")
+    print("  python hent_koordinater.py   (fyller lon/lat kun for de radene som mangler det)")
